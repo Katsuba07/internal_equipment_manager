@@ -1,0 +1,49 @@
+{% load crispy_forms_tags %}
+<form class="card panel-card" hx-post="{% url 'systems:set_edit' test_set.pk %}" hx-target="#panel" novalidate>
+  {% csrf_token %}
+  <div class="card-head">
+    <i class="bi bi-pencil"></i>
+    <span class="mono fw-600">{{ test_set }}</span>
+    <span class="spacer"></span>
+    <button type="button" class="btn btn-sm btn-ghost" hx-get="{% url 'systems:set_panel' test_set.pk %}" hx-target="#panel">Cancel</button>
+  </div>
+  {% if error %}
+  <div class="alert alert-danger panel-alert"><i class="bi bi-exclamation-octagon"></i><div>{{ error }}</div></div>
+  {% endif %}
+  {% if is_new %}
+  <div class="card-body small set-howto">
+    <b>Fill in the new set.</b> For each role, type a few characters of the Equipment ID, Asset No. or S/N
+    printed on the machine and pick it from the list. Machines already in another set are greyed out.
+  </div>
+  {% endif %}
+  <div class="card-body">
+    <div class="with-add">
+      <div class="grow">{{ line_form.line|as_crispy_field }}</div>
+      {% if user.can_manage %}<div class="qa-col"><label aria-hidden="true">&nbsp;</label><button type="button" class="btn btn-default" title="Add a new line or location"
+        data-quick-add="{% url 'quick_add' 'location' %}" data-target="id_line"><i class="bi bi-plus-lg"></i> New</button></div>{% endif %}
+    </div>
+  </div>
+  <div class="set-roles">
+    {% for row in rows %}
+    <div class="set-role" data-qa-scope>
+      <label for="id_role_{{ row.role.id }}" class="set-role-name">
+        <span class="fw-600">{{ row.role.name }}</span>
+        {% if not row.role.is_required %}<span class="badge badge-neutral">optional</span>{% endif %}
+      </label>
+      <div class="with-add tight">
+        <div class="grow">
+          {% include "core/_asset_picker.html" with name=row.name chosen=row.chosen input_id=row.input_id source=row.source empty_text=row.empty_text %}
+        </div>
+        {% if user.can_manage %}<button type="button" class="btn btn-default" title="Register a new asset"
+          data-quick-add="{% url 'quick_add' 'equipment' %}{% if row.role.category_id %}?category={{ row.role.category_id }}{% endif %}"><i class="bi bi-plus-lg"></i> New</button>{% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <div class="card-body cell-muted">This process has no roles yet. A manager adds them on the process first.</div>
+    {% endfor %}
+  </div>
+  <div class="card-body row-flex set-save">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save set</button>
+    <span class="small subtle">× beside a machine takes it out of the set.</span>
+  </div>
+</form>

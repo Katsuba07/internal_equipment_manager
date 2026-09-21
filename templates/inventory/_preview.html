@@ -1,0 +1,57 @@
+{% with status=part.stock_status %}
+<div class="pv-head">
+  <div class="pv-title">
+    <span class="mono fw-600">{{ part.code }}</span>
+    <span class="badge {{ status.1 }}">{{ status.0 }}</span>
+  </div>
+  <button type="button" class="btn btn-ghost btn-icon btn-sm" data-preview-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+</div>
+{% endwith %}
+<div class="pv-sub">{{ part.name }} · {{ part.get_kind_display }}</div>
+
+{% with photos=part.photos %}
+{% if photos %}
+<a class="pv-photo" href="{{ photos.0.file.url }}" data-lightbox title="{{ part.code }}"><img src="{{ photos.0.file.url }}" alt="{{ part.code }}"></a>
+{% if photos|length > 1 %}
+<div class="pv-strip">
+  {% for photo in photos|slice:"1:6" %}<a href="{{ photo.file.url }}" data-lightbox><img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt=""></a>{% endfor %}
+</div>
+{% endif %}
+{% else %}
+<div class="pv-photo pv-nophoto"><i class="bi bi-image"></i><span>No photo</span></div>
+{% endif %}
+{% endwith %}
+
+<div class="pv-actions">
+  <a href="{{ part.get_absolute_url }}" class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-up-right"></i> Open</a>
+  {% if user.can_record %}
+  <a href="{% url 'inventory:part_stock' part.pk %}?type=IN" class="btn btn-default btn-sm"
+     data-modal-form="{% url 'inventory:part_stock' part.pk %}?type=IN"><i class="bi bi-box-arrow-in-down"></i> Receive</a>
+  <a href="{% url 'inventory:part_stock' part.pk %}?type=OUT" class="btn btn-default btn-sm"
+     data-modal-form="{% url 'inventory:part_stock' part.pk %}?type=OUT"><i class="bi bi-box-arrow-up"></i> Issue</a>
+  {% endif %}
+  {% if user.can_manage %}<a href="{% url 'inventory:part_update' part.pk %}" class="btn btn-default btn-sm" data-modal-form="{% url 'inventory:part_update' part.pk %}"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
+  {% if user.is_admin %}<a href="{% url 'inventory:part_delete' part.pk %}" class="btn btn-danger btn-sm" title="Delete part"><i class="bi bi-trash"></i></a>{% endif %}
+</div>
+
+<dl class="pv-facts">
+  <dt>On hand</dt><dd><b>{{ part.quantity_on_hand|floatformat:"-2" }}</b> {{ part.unit }} <span class="subtle">· reorder at {{ part.min_quantity|floatformat:"-2" }}</span></dd>
+  <dt>Bin</dt><dd class="mono">{{ part.storage_location|default:"—" }}</dd>
+  {% if part.manufacturer_part %}<dt>MPN</dt><dd class="mono">{{ part.manufacturer_part }}</dd>{% endif %}
+  {% if part.specification %}<dt>Spec</dt><dd>{{ part.specification }}</dd>{% endif %}
+  <dt>Supplier</dt><dd>{{ part.supplier.name|default:"—" }}{% if part.lead_time_days %} <span class="subtle">· {{ part.lead_time_days }} days lead time</span>{% endif %}</dd>
+  <dt>Last move</dt>
+  <dd>{% if last_movement %}{{ last_movement.get_transaction_type_display }} {{ last_movement.quantity|floatformat:"-2" }} <span class="subtle">· {{ last_movement.occurred_at|date:"d M Y" }}</span>{% else %}<span class="subtle">None</span>{% endif %}</dd>
+</dl>
+
+<div class="pv-section">Used on <span class="subtle">({{ used_in|length }} asset{{ used_in|length|pluralize }}, {{ fitted_total|floatformat:"-2" }} {{ part.unit }})</span></div>
+{% if used_in %}
+<table class="pv-table">
+  {% for line in used_in|slice:":8" %}
+  <tr><td><a class="mono" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.code }}</a></td><td class="subtle">{{ line.equipment.name }}</td><td class="text-end nowrap">×{{ line.quantity|floatformat:"-2" }}</td></tr>
+  {% endfor %}
+</table>
+{% if used_in|length > 8 %}<div class="small subtle">… and {{ used_in|length|add:"-8" }} more on the full page.</div>{% endif %}
+{% else %}
+<div class="small subtle">Not on any asset's parts list.</div>
+{% endif %}

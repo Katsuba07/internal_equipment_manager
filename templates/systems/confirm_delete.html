@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ kind|lower }} — {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div style="max-width:620px">
+  <div class="page-head">
+    <div>
+      <h1>Delete {{ kind|lower }}</h1>
+      <div class="sub">{{ object }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-color:var(--danger)">
+    <div class="card-head" style="color:var(--danger)"><i class="bi bi-exclamation-triangle"></i> One click removes all of this</div>
+    <div class="card-body">
+      {% if summary.removed %}
+      <p class="mb-1">Also removed or changed:</p>
+      <ul class="mb-2" style="margin-top:0;padding-left:1.1rem">
+        {% for label, count in summary.removed %}<li>{{ label }}: <strong>{{ count }}</strong></li>{% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if summary.released %}
+      <p class="mb-1">These assets are <strong>released</strong> (not deleted) and become free to fit elsewhere:</p>
+      <div class="mb-2">
+        {% for inst in summary.released %}<span class="cell-tag">{{ inst.component.code }}</span>{% endfor %}
+      </div>
+      {% endif %}
+
+      <p class="small subtle">Equipment records are never deleted here. Each asset keeps its fitting history.</p>
+
+      <form method="post">
+        {% csrf_token %}
+        <div class="row-flex">
+          <button type="submit" class="btn btn-danger-solid"><i class="bi bi-trash"></i> Delete {{ kind|lower }}</button>
+          <a href="{{ cancel_url }}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

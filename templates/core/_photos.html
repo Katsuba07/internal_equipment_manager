@@ -1,0 +1,53 @@
+{% comment %}
+  Photos card for a record with photos (equipment, spare part).
+  Needs: obj, and upload_url = {% url 'photo_upload' app_label model pk %}.
+{% endcomment %}
+{% with photos=obj.photos %}
+<div class="card photos-card" id="photos">
+  <div class="card-head">
+    <i class="bi bi-image"></i> Photos
+    <span class="badge badge-neutral">{{ photos|length }}</span>
+  </div>
+  {% if photos %}
+  {% with main=photos.0 %}
+  <a class="photo-main" href="{{ main.file.url }}" data-lightbox title="{{ main.original_name }}">
+    <img src="{{ main.file.url }}" alt="{{ obj }} — main photo" loading="lazy">
+  </a>
+  {% endwith %}
+  <div class="photo-strip">
+    {% for photo in photos %}
+    <div class="photo-thumb{% if photo.is_primary %} is-main{% endif %}">
+      <a href="{{ photo.file.url }}" data-lightbox title="{{ photo.original_name }}">
+        <img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt="{{ photo.original_name }}" loading="lazy">
+      </a>
+      <div class="photo-actions no-print">
+        {% if user.can_record and not photo.is_primary %}
+        <form method="post" action="{% url 'photo_primary' photo.pk %}">{% csrf_token %}
+          <button class="btn btn-ghost btn-icon btn-sm" title="Make this the main photo"><i class="bi bi-star"></i></button>
+        </form>
+        {% elif photo.is_primary %}
+        <span class="main-flag" title="Main photo"><i class="bi bi-star-fill"></i></span>
+        {% endif %}
+        {% if user.can_manage %}
+        <form method="post" action="{% url 'photo_delete' photo.pk %}" onsubmit="return confirm('Delete this photo?');">{% csrf_token %}
+          <button class="btn btn-ghost btn-icon btn-sm" title="Delete photo"><i class="bi bi-trash"></i></button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty"><i class="bi bi-image"></i><div class="desc">No photos yet.</div></div>
+  {% endif %}
+  {% if user.can_record %}
+  <form class="card-body photo-upload no-print" method="post" action="{{ upload_url }}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="file" name="photos" id="page-photos" accept="image/*" multiple required data-photo-stage>
+    <button type="submit" class="btn btn-default btn-sm"><i class="bi bi-upload"></i> Upload</button>
+    <div class="photo-stage" data-photo-stage-for="page-photos"></div>
+    <div class="form-text">On a phone: take a picture or pick from the gallery, tap again to add more; × takes one out. Large photos are shrunk automatically.</div>
+  </form>
+  {% endif %}
+</div>
+{% endwith %}

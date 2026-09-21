@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Products — {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Products</h1>
+    <div class="sub">
+      {{ count_all }} product{{ count_all|pluralize }}{% if plant %} at {{ plant }}{% endif %} ·
+      {% if documents_synced %}<i class="bi bi-cloud-check"></i> documents from <a href="{{ sharepoint_folder }}" target="_blank" rel="noopener">SharePoint</a>{% if documents_checked %}, checked {{ documents_checked|timesince }} ago{% endif %}{% else %}<i class="bi bi-cloud-slash"></i> SharePoint folder not synced{% endif %}
+    </div>
+  </div>
+  <div class="actions no-print">
+    {% if documents_synced %}
+    <form method="post" action="{% url 'systems:document_sync' %}">
+      {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button type="submit" class="btn btn-default" title="Look for new or changed documents on SharePoint now"><i class="bi bi-arrow-repeat"></i> <span class="hide-sm">Check documents</span></button>
+    </form>
+    {% endif %}
+    {% if user.can_manage %}
+    <a href="?new=product" class="btn btn-primary" hx-get="{% url 'systems:product_create' %}" hx-target="#panel">
+      <i class="bi bi-plus-lg"></i> New product
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<form method="get" class="toolbar no-print" data-autosubmit>
+  <div class="search-wrap">
+    <i class="bi bi-search"></i>
+    <input type="search" name="q" value="{{ query }}" class="search-input" placeholder="Search product code, name or document…">
+  </div>
+  <select name="customer" class="form-select">
+    <option value="">All customers</option>
+    {% for c in customers %}<option value="{{ c.code }}" {% if customer == c.code %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+  </select>
+  <select name="plant" class="form-select">
+    <option value="">All plants</option>
+    {% for value, label in plants %}<option value="{{ value }}" {% if plant == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn btn-default lg-hide">Search</button>
+  {% if query or customer %}<a href="?plant={{ plant }}" class="btn btn-ghost btn-sm"><i class="bi bi-x-lg"></i> Clear</a>{% endif %}
+</form>
+
+<div class="prod-tabs no-print" role="tablist">
+  <a role="tab" class="prod-tab{% if not show_all %} is-on{% endif %}" href="?show=production{% if query %}&q={{ query|urlencode }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}">In production <span class="badge badge-neutral">{{ count_production }}</span></a>
+  <a role="tab" class="prod-tab{% if show_all %} is-on{% endif %}" href="?show=all{% if query %}&q={{ query|urlencode }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}">All products <span class="badge badge-neutral">{{ count_all }}</span></a>
+  {% if general_documents %}
+  <span class="prod-general">
+    <i class="bi bi-folder2-open"></i> General:
+    {% for doc in general_documents %}<a href="{% url 'systems:document_open' doc.pk %}" target="_blank" rel="noopener">{{ doc.file_name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+  </span>
+  {% endif %}
+</div>
+
+<div class="products-split" data-split>
+  <div class="products-list">
+    {% for group in groups %}
+    <details class="card cust-group" open>
+      <summary class="card-head">
+        <i class="bi bi-chevron-down cust-caret"></i>
+        <span class="fw-600">{{ group.name }}</span>
+        <span class="badge badge-neutral" title="{% if show_all %}products{% else %}in production of all products{% endif %}">
+          {{ group.products|length }}{% if not show_all %} of {{ group.total }}{% endif %}
+        </span>
+      </summary>
+      {% for row in group.products %}
+      {% with product=row.product %}
+      {% ifchanged product.in_production %}{% if not product.in_production %}
+      <div class="idle-divider"><i class="bi bi-pause-circle"></i> Not in production</div>
+      {% endif %}{% endifchanged %}
+      {% if not product.in_production %}
+      <div class="prod-line" data-row-link>
+        <a href="?product={{ product.pk }}" class="mono fw-600 prod-code{% if selected.product == product.pk|stringformat:'d' %} sel{% endif %}"
+           hx-get="{% url 'systems:product_panel' product.pk %}" hx-target="#panel" hx-push-url="?product={{ product.pk }}" data-select>{{ product }}</a>
+        {% if product.name %}<span class="subtle prod-line-name">{{ product.name }}</span>{% endif %}
+        <span class="spacer"></span>
+        {% for s in row.steps %}
+        <a href="?process={{ s.step.pk }}" class="prod-chip" title="{{ s.step.process.name }} · {{ s.sets|length }} set{{ s.sets|length|pluralize }}"
+           hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}" data-select>{{ s.step.process.code }}</a>
+        {% endfor %}
+        {% if product.doc_count %}<span class="prod-docs" title="{{ product.doc_count }} document{{ product.doc_count|pluralize }}"><i class="bi bi-file-earmark-text"></i> {{ product.doc_count }}</span>{% endif %}
+      </div>
+      {% else %}
+      <div class="prod" data-row-link>
+        <div class="prod-head">
+          <a href="?product={{ product.pk }}" class="mono fw-600 prod-code{% if selected.product == product.pk|stringformat:'d' %} sel{% endif %}"
+             hx-get="{% url 'systems:product_panel' product.pk %}" hx-target="#panel" hx-push-url="?product={{ product.pk }}" data-select>{{ product }}</a>
+          <span class="subtle">{{ product.name }}</span>
+        </div>
+        <div class="flow"{% if user.can_manage %} data-reorder-url="{% url 'systems:process_reorder' product.pk %}"{% endif %}>
+          {% for s in row.steps %}
+          <div class="flow-step" data-step-id="{{ s.step.pk }}"{% if user.can_manage %} draggable="true"{% endif %}>
+            <a href="?process={{ s.step.pk }}" class="flow-head{% if selected.process == s.step.pk|stringformat:'d' %} sel{% endif %}" draggable="false"
+               title="{{ s.step.process.name }} — click to edit its roles{% if user.can_manage %}, drag to reorder{% endif %}"
+               hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}" data-select>
+              {{ s.step.process.code }}
+            </a>
+            <div class="flow-sets">
+              {% for x in s.sets %}
+              <a href="?set={{ x.set.pk }}" class="flow-set{% if selected.set == x.set.pk|stringformat:'d' %} sel{% endif %}" draggable="false"
+                 title="{{ x.readiness.summary }}"
+                 hx-get="{% url 'systems:set_panel' x.set.pk %}" hx-target="#panel" hx-push-url="?set={{ x.set.pk }}" data-select>
+                <span class="flow-set-head">
+                  <span class="dot {% if product.in_production %}{{ x.readiness.dot_class }}{% else %}dot-neutral{% endif %}"></span>
+                  <b>#{{ x.set.number }}</b>
+                  {% if product.in_production and x.readiness.lines and not x.readiness.is_ready %}<span class="flow-issue">{{ x.readiness.label }}</span>{% endif %}
+                </span>
+                <span class="flow-eq">
+                  {% for st in x.readiness.lines %}
+                    {% if st.equipment %}
+                    <span class="{% if st.is_blocking and product.in_production %}bad{% endif %}" title="{{ st.role.name }}{% if st.detail %}: {{ st.detail }}{% endif %}">{{ st.equipment.code }}{% if st.is_blocking and product.in_production %} <i class="bi bi-exclamation-triangle-fill"></i>{% endif %}</span>
+                    {% elif st.is_blocking and product.in_production %}
+                    <span class="missing" title="{{ st.role.name }}: nothing fitted">— {{ st.role.name }}</span>
+                    {% endif %}
+                  {% empty %}
+                    <span class="cell-muted">no roles yet</span>
+                  {% endfor %}
+                </span>
+              </a>
+              {% empty %}<span class="cell-muted flow-empty">no set</span>{% endfor %}
+            </div>
+          </div>
+          {% empty %}
+          <span class="cell-muted">No processes yet — open the product to add them.</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% endwith %}
+      {% endfor %}
+    </details>
+    {% empty %}
+    <div class="card">
+      <div class="empty">
+        <i class="bi bi-box-seam"></i>
+        <div class="title">{% if query or customer %}No product found{% elif show_all %}No products yet{% else %}Nothing in production{% endif %}</div>
+        <div class="desc">{% if query or customer %}Nothing matches — try another code or clear the search.{% elif show_all %}Add a product to start.{% else %}No product is in production. Open <b>All products</b> to see the rest.{% endif %}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <aside class="detail-panel" id="panel" aria-live="polite">
+    {% if panel %}
+      {% include panel.template %}
+    {% else %}
+      <div class="card panel-hint"><div class="empty">
+        <i class="bi bi-hand-index"></i>
+        <div class="title">Nothing selected</div>
+        <div class="desc">Click a set (#1, #2 …) to see its equipment and parts, a process code to edit its roles, or a product code for its route.</div>
+      </div></div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

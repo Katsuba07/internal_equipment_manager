@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}{{ part.code }} — {{ APP_NAME }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs no-print">
+  <a href="{% url 'inventory:parts' %}">Spare parts</a><span class="sep">/</span>
+  <span class="mono">{{ part.code }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="row-flex mb-1">
+      <h1 class="mono">{{ part.code }}</h1>
+      <span class="badge {{ part.stock_badge_class }}">{{ part.quantity_on_hand|floatformat:"-2" }} {{ part.unit }} on hand</span>
+      {% if not part.is_active %}<span class="badge badge-muted">inactive</span>{% endif %}
+    </div>
+    <div class="sub">{{ part.name }} · {{ part.get_kind_display }}</div>
+  </div>
+  <div class="actions no-print">
+    {% if user.can_record %}
+    <a href="{% url 'inventory:part_stock' part.pk %}?type=IN" class="btn btn-default"
+       data-modal-form="{% url 'inventory:part_stock' part.pk %}?type=IN"><i class="bi bi-box-arrow-in-down"></i> Receive</a>
+    <a href="{% url 'inventory:part_stock' part.pk %}?type=OUT" class="btn btn-default"
+       data-modal-form="{% url 'inventory:part_stock' part.pk %}?type=OUT"><i class="bi bi-box-arrow-up"></i> Issue</a>
+    {% endif %}
+    {% if user.can_manage %}
+    <a href="{% url 'inventory:part_update' part.pk %}" class="btn btn-primary" data-modal-form="{% url 'inventory:part_update' part.pk %}"><i class="bi bi-pencil"></i> Edit</a>
+    {% endif %}
+    {% if user.is_admin %}
+    <a href="{% url 'inventory:part_delete' part.pk %}" class="btn btn-danger" title="Delete part"><i class="bi bi-trash"></i> <span class="hide-sm">Delete</span></a>
+    {% endif %}
+  </div>
+</div>
+
+{% if part.is_below_minimum %}
+<div class="alert alert-warning no-print">
+  <i class="bi bi-exclamation-triangle"></i>
+  <div><strong>At or below reorder point</strong> ({{ part.min_quantity|floatformat:"-2" }} {{ part.unit }}).
+    {% if part.lead_time_days %}Typical lead time {{ part.lead_time_days }} days.{% endif %}</div>
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head">
+        <i class="bi bi-diagram-3"></i> Used on equipment
+        <span class="spacer sub">{{ fitted_total|floatformat:"-2" }} {{ part.unit }} fitted in total</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Asset</th><th>Location</th><th class="text-end">Qty</th><th>Note</th></tr></thead>
+          <tbody>
+            {% for line in used_in %}
+            <tr>
+              <td class="nowrap"><a class="mono fw-600" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.code }}</a>
+                <span class="subtle">{{ line.equipment.name }}</span></td>
+              <td class="subtle">{{ line.equipment.location.name|default:"—" }}</td>
+              <td class="text-end">{{ line.quantity|floatformat:"-2" }}</td>
+              <td class="subtle">{{ line.notes }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="cell-muted">Not on any asset's parts list yet. Add it from the asset's Edit page.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><i class="bi bi-clock-history"></i> Stock movements</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Movement</th><th class="text-end">Qty</th><th class="text-end">Balance</th><th>Issued to</th><th>Reason</th><th>By</th></tr></thead>
+          <tbody>
+            {% for move in movements %}
+            <tr>
+              <td class="nowrap">{{ move.occurred_at|date:"d M Y H:i" }}</td>
+              <td>{{ move.get_transaction_type_display }}</td>
+              <td class="text-end">{% if move.transaction_type == "OUT" %}−{% elif move.transaction_type == "IN" %}+{% endif %}{{ move.quantity|floatformat:"-2" }}</td>
+              <td class="text-end">{{ move.quantity_after|floatformat:"-2" }}</td>
+              <td class="nowrap">{% if move.equipment %}<a class="mono" href="{{ move.equipment.get_absolute_url }}">{{ move.equipment.code }}</a>{% else %}<span class="subtle">—</span>{% endif %}</td>
+              <td>{{ move.reason }}</td>
+              <td class="subtle nowrap">{{ move.performed_by.get_short_name|default:"" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="cell-muted">No movements yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    {% url 'photo_upload' 'inventory' 'inventoryitem' part.pk as upload_url %}
+    {% include "core/_photos.html" with obj=part upload_url=upload_url %}
+    <div class="card">
+      <div class="card-head"><i class="bi bi-info-circle"></i> Details</div>
+      <div class="card-body">
+        <div class="defs">
+          <div><div class="k">Specification</div><div class="v {% if not part.specification %}empty{% endif %}">{{ part.specification|default:"—" }}</div></div>
+          <div><div class="k">Manufacturer P/N</div><div class="v mono {% if not part.manufacturer_part %}empty{% endif %}">{{ part.manufacturer_part|default:"—" }}</div></div>
+          <div><div class="k">Bin location</div><div class="v mono {% if not part.storage_location %}empty{% endif %}">{{ part.storage_location|default:"—" }}</div></div>
+          <div><div class="k">Reorder point</div><div class="v">{{ part.min_quantity|floatformat:"-2" }} {{ part.unit }}</div></div>
+          <div><div class="k">Supplier</div><div class="v {% if not part.supplier %}empty{% endif %}">{{ part.supplier.name|default:"—" }}</div></div>
+          <div><div class="k">Unit price</div><div class="v {% if not part.unit_price %}empty{% endif %}">{% if part.unit_price %}${{ part.unit_price|floatformat:2 }}{% else %}—{% endif %}</div></div>
+          <div><div class="k">Lead time</div><div class="v {% if not part.lead_time_days %}empty{% endif %}">{% if part.lead_time_days %}{{ part.lead_time_days }} days{% else %}—{% endif %}</div></div>
+          {% if part.notes %}<div class="wide"><div class="k">Notes</div><div class="v">{{ part.notes|linebreaksbr }}</div></div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,123 @@
+<div class="card panel-card" data-panel="product-{{ product.pk }}" data-panel-url="{% url 'systems:product_panel' product.pk %}" data-page-url="?product={{ product.pk }}">
+  <div class="card-head">
+    <span class="mono fw-600">{{ product }}</span>
+    {% if product.in_production %}<span class="badge badge-success">In production</span>{% else %}<span class="badge badge-muted">Not in production</span>{% endif %}
+    <span class="spacer"></span>
+    {% if user.can_manage %}
+    <button type="button" class="btn btn-sm btn-default" hx-post="{% url 'systems:product_toggle' product.pk %}"
+            title="{% if product.in_production %}Mark as not in production{% else %}Mark as in production{% endif %}">
+      <i class="bi bi-{% if product.in_production %}pause-circle{% else %}play-circle{% endif %}"></i>
+      {% if product.in_production %}Stop{% else %}Start{% endif %}
+    </button>
+    <button type="button" class="btn btn-sm btn-default" hx-get="{% url 'systems:product_edit' product.pk %}" hx-target="#panel">
+      <i class="bi bi-pencil"></i> Edit
+    </button>
+    {% endif %}
+    {% if user.is_admin %}
+    <a href="{% url 'systems:product_delete' product.pk %}" class="btn btn-sm btn-danger" title="Delete product"><i class="bi bi-trash"></i></a>
+    {% endif %}
+  </div>
+  <div class="card-body panel-crumbs small">
+    {{ product.customer.name|default:"No customer" }}{% if product.name %} · {{ product.name }}{% endif %}
+    {% if product.description %}<div class="subtle">{{ product.description }}</div>{% endif %}
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th style="width:2.2rem">#</th><th>Process</th><th>Sets</th>{% if user.can_manage %}<th class="text-end">Order</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for s in steps %}
+        <tr>
+          <td class="subtle">{{ forloop.counter }}</td>
+          <td class="nowrap">
+            <a class="fw-600" href="?process={{ s.step.pk }}" hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}">{{ s.step.process.code }}</a>
+            <span class="subtle small">{{ s.step.roles.all|length }} role{{ s.step.roles.all|length|pluralize }}</span>
+          </td>
+          <td>
+            {% for x in s.sets %}
+            <a href="?set={{ x.set.pk }}" class="set-chip" title="{{ x.readiness.summary }}"
+               hx-get="{% url 'systems:set_panel' x.set.pk %}" hx-target="#panel" hx-push-url="?set={{ x.set.pk }}">
+              <span class="dot {{ x.readiness.dot_class }}"></span><b>#{{ x.set.number }}</b>
+              <span class="subtle">{{ x.set.line.name|default:"" }}</span>
+            </a>
+            {% empty %}<span class="cell-muted">no set</span>{% endfor %}
+          </td>
+          {% if user.can_manage %}
+          <td class="text-end nowrap">
+            <button type="button" class="btn btn-sm btn-ghost btn-icon" title="Move up" {% if forloop.first %}disabled{% endif %}
+                    hx-post="{% url 'systems:process_move' s.step.pk 'up' %}"><i class="bi bi-arrow-up"></i></button>
+            <button type="button" class="btn btn-sm btn-ghost btn-icon" title="Move down" {% if forloop.last %}disabled{% endif %}
+                    hx-post="{% url 'systems:process_move' s.step.pk 'down' %}"><i class="bi bi-arrow-down"></i></button>
+          </td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="cell-muted">No processes yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if user.can_manage %}
+  <form class="card-body" hx-post="{% url 'systems:process_add' product.pk %}">
+    {% csrf_token %}
+    <div class="with-add tight">
+      <div class="grow">{{ add_form.process }}</div>
+      <button type="button" class="btn btn-default" title="Add a new process to the catalog"
+              data-quick-add="{% url 'quick_add' 'systemtype' %}" data-target="id_process"><i class="bi bi-plus-lg"></i> New</button>
+      <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add process</button>
+    </div>
+    <div class="form-text">Added at the end of the route with its template roles and set #1. Use the arrows to reorder.</div>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card panel-card docs-card" data-tabs>
+  <div class="card-head">
+    <i class="bi bi-folder2-open"></i> Documents
+    <span class="spacer"></span>
+    <a class="small" href="{{ product_folder_url }}" target="_blank" rel="noopener">Folder on SharePoint <i class="bi bi-box-arrow-up-right"></i></a>
+  </div>
+  {% if document_groups %}
+  <div class="doc-tabs" role="tablist">
+    {% for group in document_groups %}
+    <button type="button" role="tab" class="doc-tab{% if forloop.first %} is-on{% endif %}" data-tab="{{ group.section }}" data-section="{{ group.section }}" title="{{ group.label }}">
+      {{ group.tab }} <span class="doc-tab-count">{{ group.docs|length }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% for group in document_groups %}
+  <div class="doc-pane" role="tabpanel" data-pane="{{ group.section }}"{% if not forloop.first %} hidden{% endif %}>
+    {% for doc in group.docs %}
+    <div class="doc-line">
+      <a href="{% url 'systems:document_open' doc.pk %}" target="_blank" rel="noopener" class="doc-name" title="Open on SharePoint">
+        <i class="bi {{ doc.icon }}"></i> {{ doc.file_name }}
+      </a>
+      <span class="subtle small nowrap">{{ doc.size_display }}</span>
+      <a class="btn btn-ghost btn-icon btn-sm" href="{% url 'systems:document_open' doc.pk %}?download=1" title="Download"><i class="bi bi-download"></i></a>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="card-body cell-muted">No documents for {{ product.code }} yet.</div>
+  {% endif %}
+  {% if user.can_manage %}
+  <form class="card-body doc-upload" method="post" action="{% url 'systems:document_upload' product.pk %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="fw-600 small">Add or replace documents</div>
+    {% if documents_synced %}
+    <div class="doc-upload-row">
+      <select name="section" class="form-select" required>
+        {% for value, label in document_sections %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <input type="file" name="files" multiple required class="form-control">
+      <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-cloud-upload"></i> Add to SharePoint</button>
+    </div>
+    <div class="form-text">Goes into {{ product.code }}'s folder on SharePoint. A file with the same name replaces the old one; SharePoint keeps the old version.</div>
+    {% else %}
+    <div class="form-text">Not available until the SharePoint folder is synced to this server.</div>
+    {% endif %}
+  </form>
+  {% endif %}
+</div>

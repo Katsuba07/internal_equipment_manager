@@ -1,0 +1,71 @@
+{% load django_tables2 %}
+{% comment %}
+  Table markup for every list screen. Replaces the packaged Bootstrap template
+  so tables match the rest of the design system.
+{% endcomment %}
+
+<div class="table-wrap">
+  <table {% render_attrs table.attrs class="data-table" %}>
+    {% if table.show_header %}
+    <thead>
+      <tr>
+        {% for column in table.columns %}
+        <th {{ column.attrs.th.as_html }}>
+          {% if column.orderable %}
+            <a href="{% querystring_replace table.prefixed_order_by_field=column.order_by_alias.next %}">
+              {{ column.header }}
+              {% if column.is_ordered %}
+                <i class="bi bi-caret-{% if column.order_by_alias.is_descending %}down{% else %}up{% endif %}-fill sort-indicator"></i>
+              {% endif %}
+            </a>
+          {% else %}
+            {{ column.header }}
+          {% endif %}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    {% endif %}
+
+    <tbody>
+      {% for row in table.paginated_rows %}
+      <tr {{ row.attrs.as_html }}>
+        {% for column, cell in row.items %}
+        <td {{ column.attrs.td.as_html }}>{{ cell }}</td>
+        {% endfor %}
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="{{ table.columns|length }}">
+          <div class="empty">
+            <i class="bi bi-search"></i>
+            <div class="title">Nothing found</div>
+            <div class="desc">{{ table.empty_text }}</div>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if table.page and table.paginator.num_pages > 1 %}
+<div class="pager">
+  <span>
+    Showing {{ table.page.start_index }}–{{ table.page.end_index }}
+    of {{ table.paginator.count }}
+  </span>
+  <div class="pages">
+    {% if table.page.has_previous %}
+      <a href="{% querystring_replace table.prefixed_page_field=1 %}" aria-label="First page"><i class="bi bi-chevron-double-left"></i></a>
+      <a href="{% querystring_replace table.prefixed_page_field=table.page.previous_page_number %}" aria-label="Previous page"><i class="bi bi-chevron-left"></i></a>
+    {% endif %}
+    <span class="current">{{ table.page.number }}</span>
+    <span style="border:0;color:var(--text-subtle)">of {{ table.paginator.num_pages }}</span>
+    {% if table.page.has_next %}
+      <a href="{% querystring_replace table.prefixed_page_field=table.page.next_page_number %}" aria-label="Next page"><i class="bi bi-chevron-right"></i></a>
+      <a href="{% querystring_replace table.prefixed_page_field=table.paginator.num_pages %}" aria-label="Last page"><i class="bi bi-chevron-double-right"></i></a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

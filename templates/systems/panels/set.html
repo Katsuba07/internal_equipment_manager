@@ -1,0 +1,76 @@
+{% with step=test_set.product_process %}
+<div class="card panel-card" data-panel="set-{{ test_set.pk }}" data-panel-url="{% url 'systems:set_panel' test_set.pk %}" data-page-url="?set={{ test_set.pk }}">
+  <div class="card-head">
+    <span class="dot {{ readiness.dot_class }}"></span>
+    <span class="mono fw-600">{{ test_set }}</span>
+    <span class="badge {{ readiness.badge_class }}">{{ readiness.label }}</span>
+    <span class="spacer"></span>
+    {% if user.can_record %}
+    <button type="button" class="btn btn-sm btn-primary" hx-get="{% url 'systems:set_edit' test_set.pk %}" hx-target="#panel">
+      <i class="bi bi-pencil"></i> Edit
+    </button>
+    {% endif %}
+    {% if user.is_admin %}
+    <a href="{% url 'systems:set_delete' test_set.pk %}" class="btn btn-sm btn-danger" title="Delete this set"><i class="bi bi-trash"></i></a>
+    {% endif %}
+  </div>
+  <div class="card-body panel-crumbs small">
+    {{ step.product.customer.name|default:"No customer" }} ·
+    <a href="?product={{ step.product_id }}" hx-get="{% url 'systems:product_panel' step.product_id %}" hx-target="#panel" hx-push-url="?product={{ step.product_id }}">{{ step.product.code }}</a> ·
+    <a href="?process={{ step.pk }}" hx-get="{% url 'systems:process_panel' step.pk %}" hx-target="#panel" hx-push-url="?process={{ step.pk }}">{{ step.process.name }}</a>
+    · {{ test_set.line.name|default:"line not set" }}{% if test_set.line.plant %} <span class="badge badge-neutral">{{ test_set.line.get_plant_display }}</span>{% endif %}
+  </div>
+
+  {% if readiness.blocking %}
+  <div class="alert alert-danger panel-alert">
+    <i class="bi bi-exclamation-octagon"></i>
+    <div><strong>Not ready.</strong> {{ readiness.summary }}</div>
+  </div>
+  {% endif %}
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Role</th><th>Equipment in use</th><th>State</th></tr></thead>
+      <tbody>
+        {% for st in readiness.lines %}
+        <tr>
+          <td class="nowrap">{{ st.role.name }}{% if not st.role.is_required %} <span class="badge badge-neutral">optional</span>{% endif %}</td>
+          <td>
+            {% if st.equipment %}
+            <div class="eq-line">
+            {% with photo=st.equipment.main_photo %}
+            {% if photo %}<a href="{{ photo.file.url }}" data-lightbox class="eq-thumb" title="{{ st.equipment.code }}"><img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt="{{ st.equipment.code }}" loading="lazy"></a>
+            {% else %}<span class="eq-thumb eq-thumb-empty" title="No photo"><i class="bi bi-image"></i></span>{% endif %}
+            {% endwith %}
+            <span><a class="mono fw-600" href="{{ st.equipment.get_absolute_url }}">{{ st.equipment.code }}</a>
+            <span class="subtle">{{ st.equipment.name }}</span></span>
+            </div>
+            {% with parts=st.equipment.parts.all %}{% if parts %}
+            <details class="parts-mini">
+              <summary>{{ parts|length }} part{{ parts|length|pluralize }}</summary>
+              <table>
+                {% for line in parts %}
+                <tr>
+                  <td><a class="mono" href="{{ line.item.get_absolute_url }}">{{ line.item.code }}</a> <span class="subtle">{{ line.item.name }}</span></td>
+                  <td class="text-end nowrap">×{{ line.quantity|floatformat:"-2" }}</td>
+                  <td class="text-end nowrap {{ line.item.stock_cell_class }}" title="In stock">{{ line.item.quantity_on_hand|floatformat:"-2" }} {{ line.item.unit }}</td>
+                </tr>
+                {% endfor %}
+              </table>
+            </details>
+            {% endif %}{% endwith %}
+            {% else %}<span class="cell-muted">—</span>{% endif %}
+          </td>
+          <td>
+            <span class="badge {{ st.badge_class }}">{{ st.state_label }}</span>
+            {% if st.detail %}<div class="small subtle">{{ st.detail }}</div>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="cell-muted">No roles yet — open {{ step.process.code }} to declare what this set is made of.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endwith %}

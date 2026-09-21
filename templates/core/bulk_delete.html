@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ count }} {{ noun }} — {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Delete {{ count }} {{ noun }}?</h1>
+    <div class="sub">This cannot be undone.</div>
+  </div>
+</div>
+
+<div class="card" style="max-width: 48rem">
+  <div class="card-body">
+    {% if summary %}
+    <p class="mb-2">Deleted along with them:</p>
+    <ul class="mb-3">
+      {% for label, n in summary.items %}<li>{{ n }} {{ label|lower }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="table-wrap mb-3">
+      <table class="data-table">
+        <tbody>
+          {% for item in items %}
+          <tr><td class="mono fw-600 nowrap">{{ item.code }}</td><td class="subtle">{{ item.name }}</td></tr>
+          {% endfor %}
+          {% if more %}<tr><td colspan="2" class="cell-muted">… and {{ more }} more.</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" class="row-flex">
+      {% csrf_token %}
+      <input type="hidden" name="ids" value="{{ ids }}">
+      <button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Delete {{ count }} {{ noun }}</button>
+      <a href="{{ cancel_url }}" class="btn btn-ghost">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

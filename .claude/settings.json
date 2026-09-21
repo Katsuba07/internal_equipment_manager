@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Users/tobydo-ctv2/Desktop/02. Project/02_Equipment_Management_Application/.venv/Scripts/graphify.EXE\" hook-guard search",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Users/tobydo-ctv2/Desktop/02. Project/02_Equipment_Management_Application/.venv/Scripts/graphify.EXE\" hook-guard read",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

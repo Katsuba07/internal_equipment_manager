@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in — {{ APP_NAME }}{% endblock %}
+
+{% block anonymous_content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-head">
+      <span class="brand-mark"><i class="bi bi-cpu"></i></span>
+      <h1>{{ APP_NAME }}</h1>
+      <div class="sub">Sign in to continue</div>
+    </div>
+
+    {% if form.errors %}
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-octagon"></i>
+      <div>That username and password do not match. Please try again.</div>
+    </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
+        <input type="text" name="username" id="{{ form.username.id_for_label }}"
+               autocomplete="username" autofocus required
+               value="{{ form.username.value|default:'' }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
+        <input type="password" name="password" id="{{ form.password.id_for_label }}"
+               autocomplete="current-password" required>
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="btn btn-primary" style="width:100%;padding:0.55rem">
+        <i class="bi bi-box-arrow-in-right"></i> Sign in
+      </button>
+    </form>
+
+    <p class="small subtle text-center mt-2 mb-0" style="text-align:center">
+      Forgotten your password? Ask an administrator to reset it.
+    </p>
+  </div>
+</div>
+{% endblock %}

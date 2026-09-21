@@ -1,0 +1,55 @@
+{% load crispy_forms_tags %}
+{% comment %}The part form's fields — shared by the full page and the edit dialog.{% endcomment %}
+  <div class="card">
+    <div class="card-head"><i class="bi bi-tag"></i> Part</div>
+    <div class="card-body">
+      <div class="field-grid">
+        <div>{{ form.code|as_crispy_field }}</div>
+        <div class="span-2">{{ form.name|as_crispy_field }}</div>
+        <div>{{ form.kind|as_crispy_field }}</div>
+        <div>{{ form.unit|as_crispy_field }}</div>
+        <div>{{ form.manufacturer_part|as_crispy_field }}</div>
+        <div class="span-all">{{ form.specification|as_crispy_field }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-camera"></i> Photos</div>
+    <div class="card-body">
+      {% with photos=object.photos %}
+      {% if photos %}
+      <div class="form-photos">
+        {% for photo in photos %}
+        <label class="form-photo{% if photo.is_primary %} is-main{% endif %}" title="{% if photo.is_primary %}Main photo — {% endif %}tick × to delete on save">
+          <input type="checkbox" name="remove_photos" value="{{ photo.pk }}">
+          <img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt="">
+          <span class="form-photo-x" aria-label="Delete this photo"><i class="bi bi-x-lg"></i></span>
+          <span class="form-photo-gone">Deleted on save</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+      {{ form.photos|as_crispy_field }}
+      <div class="photo-stage" data-photo-stage-for="{{ form.photos.id_for_label }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-box-seam"></i> Stock</div>
+    <div class="card-body">
+      <div class="field-grid">
+        {% if form.opening_stock %}<div>{{ form.opening_stock|as_crispy_field }}</div>{% endif %}
+        <div>{{ form.min_quantity|as_crispy_field }}</div>
+        <div>{{ form.plant|as_crispy_field }}</div>
+        <div>{{ form.storage_location|as_crispy_field }}</div>
+        <div class="with-add"><div class="grow">{{ form.supplier|as_crispy_field }}</div><div class="qa-col"><label aria-hidden="true">&nbsp;</label>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new supplier" data-quick-add="{% url 'quick_add' 'supplier' %}" data-target="id_supplier"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></div>
+        <div>{{ form.unit_price|as_crispy_field }}</div>
+        <div>{{ form.lead_time_days|as_crispy_field }}</div>
+      </div>
+      {% if form.is_active %}{{ form.is_active|as_crispy_field }}{% endif %}
+      {{ form.notes|as_crispy_field }}
+    </div>
+  </div>
+

@@ -1,0 +1,10 @@
+{% for event in activity %}
+<{% if event.url %}a href="{{ event.url }}"{% else %}div{% endif %} class="row-item" title="{{ event.text }}">
+  <span class="mono">{{ event.code }}</span>
+  <span class="badge {{ event.badge }}">{{ event.tag }}</span>
+  <span class="row-main row-title">{{ event.text }}</span>
+  <span class="subtle nowrap small">{{ event.when|date:"d M H:i" }}{% if event.who %} · {{ event.who.get_short_name }}{% endif %}</span>
+</{% if event.url %}a{% else %}div{% endif %}>
+{% empty %}
+<div class="empty"><div class="desc">No activity yet.</div></div>
+{% endfor %}

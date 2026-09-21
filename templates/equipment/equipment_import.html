@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Import equipment — {{ APP_NAME }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs">
+  <a href="{% url 'equipment:list' %}">Equipment</a>
+  <span class="sep">/</span>
+  <span>Import</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:780px">
+  <div class="page-head">
+    <div>
+      <h1>Import from Excel</h1>
+      <div class="sub">Load your existing asset list in one go.</div>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="card mb-2" style="border-color:var(--danger)">
+    <div class="card-head" style="color:var(--danger)">
+      <i class="bi bi-exclamation-octagon"></i>
+      {{ errors|length }} problem{{ errors|length|pluralize }} found — nothing was imported
+    </div>
+    <div class="card-body">
+      <p class="small subtle">
+        The whole file is checked before anything is written. Fix these rows in
+        Excel and upload again.
+      </p>
+      <ul class="small" style="margin:0;padding-left:1.1rem">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-list-ol"></i> How it works</div>
+    <div class="card-body">
+      <ol style="margin:0 0 0.5rem;padding-left:1.2rem">
+        <li style="margin-bottom:0.6rem">
+          Download the template. It already lists every category, location and
+          supplier code defined in the system, on a <em>Reference</em> sheet.
+          <div class="mt-1">
+            <a href="{% url 'equipment:import_template' %}" class="btn btn-default btn-sm">
+              <i class="bi bi-download"></i> Download template
+            </a>
+          </div>
+        </li>
+        <li style="margin-bottom:0.6rem">
+          Fill in the <strong>Equipment</strong> sheet. Columns with a
+          <span class="badge badge-danger">red header</span> are required.
+          Delete the example row before uploading.
+        </li>
+        <li>Upload the completed file below.</li>
+      </ol>
+
+      <div class="alert alert-warning mb-0 mt-2">
+        <i class="bi bi-exclamation-triangle"></i>
+        <div>
+          <strong>Set up catalogs first.</strong>
+          Categories and locations must exist before importing, because the
+          spreadsheet refers to them by code —
+          {% if user.is_admin %}
+          create them under <a href="{% url 'admin:core_category_changelist' %}">Categories</a>
+          and <a href="{% url 'admin:core_location_changelist' %}">Locations</a>.
+          {% else %}
+          ask an administrator to add any that are missing.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-file-earmark-arrow-up"></i> Upload</div>
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {{ form|crispy }}
+        <div class="row-flex mt-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-upload"></i> Import
+          </button>
+          <a href="{% url 'equipment:list' %}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

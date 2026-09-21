@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Stock movement — {{ part.code }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs">
+  <a href="{% url 'inventory:parts' %}">Spare parts</a><span class="sep">/</span>
+  <a href="{{ part.get_absolute_url }}" class="mono">{{ part.code }}</a><span class="sep">/</span><span>Stock movement</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:620px">
+  <div class="page-head">
+    <div>
+      <h1>Stock movement</h1>
+      <div class="sub"><span class="mono">{{ part.code }}</span> · {{ part.name }} · {{ part.quantity_on_hand|floatformat:"-2" }} {{ part.unit }} on hand</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form|crispy }}
+        <p class="small subtle">For a stocktake, enter the counted quantity — it replaces the balance.</p>
+        <div class="row-flex mt-2">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Record</button>
+          <a href="{{ part.get_absolute_url }}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

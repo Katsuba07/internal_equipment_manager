@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ object.code }} — {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div style="max-width:620px">
+  <div class="page-head">
+    <div>
+      <h1>Delete asset</h1>
+      <div class="sub">This cannot be undone.</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-color:var(--danger)">
+    <div class="card-head" style="color:var(--danger)">
+      <i class="bi bi-exclamation-triangle"></i> Confirm deletion
+    </div>
+    <div class="card-body">
+      <div class="row-item" style="border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem">
+        <div class="row-main">
+          <div class="row-title"><span class="mono">{{ object.code }}</span> — {{ object.name }}</div>
+          <div class="row-sub">{{ object.category.name }}{% if object.location %} · {{ object.location.full_path }}{% endif %}</div>
+        </div>
+      </div>
+
+      <div class="mt-2">
+        <div class="k small subtle mb-1">Related records that would be lost</div>
+        <div class="rows" style="border:1px solid var(--border);border-radius:var(--radius)">
+          {% for label, count in related_counts.items %}
+          <div class="row-item">
+            <div class="row-main"><div class="row-title">{{ label }}</div></div>
+            <div class="row-side">
+              <strong class="{% if count %}text-danger{% else %}subtle{% endif %}">{{ count }}</strong>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="alert alert-warning mt-2">
+        <i class="bi bi-lightbulb"></i>
+        <div>
+          <strong>Consider retiring instead.</strong>
+          Setting the status to <em>Retired</em> keeps the full maintenance,
+          repair and calibration history available for audits, which deletion
+          throws away permanently.
+        </div>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <div class="row-flex">
+          <button type="submit" class="btn btn-danger-solid">
+            <i class="bi bi-trash"></i> Delete permanently
+          </button>
+          <a href="{{ object.get_absolute_url }}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

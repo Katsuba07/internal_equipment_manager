@@ -1,0 +1,139 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+
+  {% comment %}
+    Apply the saved theme before the first paint, so the page never flashes
+    the wrong colour scheme while loading.
+  {% endcomment %}
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("ema-theme");
+        var preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", saved || preferred);
+      } catch (e) {}
+    })();
+  </script>
+
+  <link rel="stylesheet" href="{% static 'css/bootstrap-icons.min.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v={{ STATIC_VERSION }}">
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+
+{% if user.is_authenticated %}
+<header class="topbar">
+  <button class="btn btn-ghost btn-icon lg-hide" data-nav-toggle aria-label="Toggle navigation">
+    <i class="bi bi-list"></i>
+  </button>
+
+  <a class="brand" href="{% url 'dashboard' %}">
+    <span class="brand-mark"><i class="bi bi-cpu"></i></span>
+    <span class="hide-sm">{{ APP_NAME }}</span>
+  </a>
+
+  <div class="spacer"></div>
+
+  <button class="btn btn-ghost btn-icon" data-theme-toggle aria-label="Switch theme">
+    <i class="bi bi-moon-stars" data-theme-icon></i>
+  </button>
+
+  <div class="dropdown">
+    <button class="btn btn-ghost" data-dropdown aria-haspopup="true">
+      <span class="avatar">{{ user.initials }}</span>
+      <span class="hide-sm">{{ user.get_full_name }}</span>
+      <i class="bi bi-chevron-down small"></i>
+    </button>
+    <div class="dropdown-menu">
+      <div class="dropdown-head">
+        <div class="name">{{ user.get_full_name }}</div>
+        <span class="badge {{ user.role_badge_class }}">{{ user.get_role_display }}</span>
+      </div>
+      <a class="dropdown-item" href="{% url 'password_change' %}">
+        <i class="bi bi-key"></i> Change password
+      </a>
+      <button class="dropdown-item" data-theme-toggle>
+        <i class="bi bi-moon-stars" data-theme-icon></i> <span data-theme-label>Dark mode</span>
+      </button>
+      {% if user.is_admin %}
+      <a class="dropdown-item" href="{% url 'admin:index' %}">
+        <i class="bi bi-sliders"></i> Admin site
+      </a>
+      {% endif %}
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="dropdown-item danger">
+          <i class="bi bi-box-arrow-right"></i> Sign out
+        </button>
+      </form>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <nav>
+      {% url 'dashboard' as url_dashboard %}
+      <a class="nav-link {% if request.path == url_dashboard %}active{% endif %}" href="{{ url_dashboard }}">
+        <i class="bi bi-grid-1x2"></i> Overview
+      </a>
+      <a class="nav-link {% if '/equipment/' in request.path %}active{% endif %}" href="{% url 'equipment:list' %}">
+        <i class="bi bi-hdd-stack"></i> Equipment
+      </a>
+      <a class="nav-link {% if '/parts/' in request.path %}active{% endif %}" href="{% url 'inventory:parts' %}">
+        <i class="bi bi-nut"></i> Spare parts
+      </a>
+      <a class="nav-link {% if '/products/' in request.path %}active{% endif %}" href="{% url 'systems:products' %}">
+        <i class="bi bi-box-seam"></i> Products
+      </a>
+
+
+      {% if user.is_admin %}
+      <div class="nav-section">Administration</div>
+      <a class="nav-link" href="{% url 'admin:index' %}">
+        <i class="bi bi-sliders"></i> Data entry
+      </a>
+      <a class="nav-link" href="{% url 'admin:core_user_changelist' %}">
+        <i class="bi bi-people"></i> Users
+      </a>
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-foot">
+      {{ APP_SHORT_NAME }} &middot; v{{ APP_VERSION }}
+    </div>
+  </aside>
+
+  <main class="content">
+    {% block breadcrumb %}{% endblock %}
+
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">
+        <i class="bi bi-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'danger' %}exclamation-octagon{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
+        <div>{{ message }}</div>
+        <button type="button" class="close" aria-label="Dismiss">&times;</button>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+{% else %}
+  {% block anonymous_content %}{% endblock %}
+{% endif %}
+
+{% include "core/_preview_drawer.html" %}
+
+<script src="{% static 'js/htmx.min.js' %}"></script>
+<script src="{% static 'js/app.js' %}?v={{ STATIC_VERSION }}"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

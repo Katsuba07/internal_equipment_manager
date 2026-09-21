@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Overview — {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Overview</h1>
+    <div class="sub">
+      {% now "l d M Y" %} ·
+      {% if attention_total %}
+        {{ attention_total }} item{{ attention_total|pluralize }} need attention.
+      {% else %}
+        Everything is on schedule.
+      {% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <a href="{% url 'systems:products' %}" class="btn btn-default"><i class="bi bi-box-seam"></i> Products</a>
+    <a href="{% url 'equipment:list' %}" class="btn btn-default"><i class="bi bi-hdd-stack"></i> All equipment</a>
+    {% if user.can_manage %}
+    <a href="{% url 'equipment:create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add asset</a>
+    {% endif %}
+  </div>
+</div>
+
+{% comment %}
+  1. The line. What is in production and whether each set can run, first —
+  that is the question the morning starts with.
+{% endcomment %}
+<div class="card line-card">
+  <div class="card-head">
+    <span class="nowrap"><i class="bi bi-diagram-3"></i> Line status</span>
+    <span class="line-kpis">
+      <span><b>{{ line.product_count }}</b> product{{ line.product_count|pluralize }} in production</span>
+      <span class="ok"><b>{{ line.sets_ready }}</b> of {{ line.sets_total }} set{{ line.sets_total|pluralize }} ready</span>
+      {% if line.sets_bad %}<span class="bad"><b>{{ line.sets_bad }}</b> with issues</span>{% endif %}
+    </span>
+    <span class="spacer"></span>
+    <a href="{% url 'systems:products' %}" class="small">Open Products</a>
+  </div>
+
+  {% if line.rows %}
+  <div class="line-rows">
+    {% for row in line.rows %}
+    <div class="line-row{% if row.bad %} is-bad{% endif %}">
+      <span class="dot {% if row.bad %}dot-danger{% else %}dot-success{% endif %}"></span>
+      <a class="mono fw-600 line-code" href="{% url 'systems:products' %}?product={{ row.product.pk }}">{{ row.product.code }}</a>
+      <span class="subtle small line-cust">{{ row.customer }}</span>
+      <span class="line-pills">
+        {% for pill in row.pills %}{% if not forloop.first %}<i class="bi bi-chevron-right line-sep" aria-hidden="true"></i>{% endif %}<a class="pill {% if pill.readiness.is_ready %}pill-ok{% else %}pill-bad{% endif %}"
+             href="{% url 'systems:products' %}?set={{ pill.set.pk }}"
+             title="{{ pill.set }} — {{ pill.readiness.summary }}">{{ pill.label }}{% if not pill.readiness.is_ready %} <i class="bi bi-exclamation-triangle-fill"></i>{% endif %}</a>{% endfor %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if line.issues %}
+  <div class="line-issues">
+    <div class="line-issues-head"><i class="bi bi-exclamation-octagon"></i> What stops a set</div>
+    {% for issue in line.issues %}
+    <a class="line-issue" href="{% url 'systems:products' %}?set={{ issue.set.pk }}">
+      <span class="mono fw-600">{{ issue.set }}</span>
+      <span class="subtle">{{ issue.line.role.name }}</span>
+      {% if issue.line.equipment %}<span class="mono">{{ issue.line.equipment.code }}</span>{% endif %}
+      <span class="issue-why">{{ issue.line.detail|default:issue.line.state_label }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="empty">
+    <i class="bi bi-pause-circle"></i>
+    <div class="title">Nothing in production</div>
+    <div class="desc">Mark a product "In production" on the Products page to follow it here.</div>
+  </div>
+  {% endif %}
+</div>
+
+
+{% comment %}
+  2. The numbers: only the ones worth acting on, each tile a link to the list
+  it counts, plus the split across the three plants.
+{% endcomment %}
+<div class="section-title"><i class="bi bi-hdd-stack"></i> Equipment</div>
+<div class="tile-row">
+  <a class="tile" href="{% url 'equipment:list' %}">
+    <span class="t-label">Assets</span>
+    <span class="t-value">{{ total_equipment|intcomma }}</span>
+    <span class="t-foot">{{ in_production_count }} in production · {{ measuring_count }} calibrated</span>
+  </a>
+  <a class="tile {% if down_count %}bad{% endif %}" href="{% url 'equipment:list' %}?status=DOWN">
+    <span class="t-label">Down / repair</span>
+    <span class="t-value">{{ down_count }}</span>
+    <span class="t-foot">not available</span>
+  </a>
+  <a class="tile {% if calibration_overdue_count %}bad{% endif %}" href="{% url 'equipment:list' %}?is_measuring_device=true">
+    <span class="t-label">Calibration overdue</span>
+    <span class="t-value">{{ calibration_overdue_count }}</span>
+    <span class="t-foot">do not measure with these</span>
+  </a>
+  <a class="tile {% if maintenance_overdue_count %}warn{% endif %}" href="{% url 'equipment:list' %}">
+    <span class="t-label">Maintenance overdue</span>
+    <span class="t-value">{{ maintenance_overdue_count }}</span>
+    <span class="t-foot">{{ maintenance_required_count }} on a round</span>
+  </a>
+</div>
+<div class="plant-row">
+  <span class="subtle small">By plant:</span>
+  {% for plant in plants %}
+  <a class="plant-chip" href="{% url 'equipment:list' %}?plant={{ plant.code }}">
+    <b>{{ plant.label }}</b> {{ plant.assets }} asset{{ plant.assets|pluralize }}
+    <span class="subtle">· {{ plant.parts }} part{{ plant.parts|pluralize }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+<div class="section-title"><i class="bi bi-nut"></i> Spare parts</div>
+<div class="tile-row">
+  <a class="tile" href="{% url 'inventory:parts' %}">
+    <span class="t-label">Parts</span>
+    <span class="t-value">{{ part_count|intcomma }}</span>
+    <span class="t-foot">in the catalog</span>
+  </a>
+  <a class="tile {% if low_stock_count %}warn{% endif %}" href="{% url 'inventory:parts' %}?low=1">
+    <span class="t-label">Low stock</span>
+    <span class="t-value">{{ low_stock_count }}</span>
+    <span class="t-foot">at or below reorder point</span>
+  </a>
+  <a class="tile {% if out_of_stock_count %}bad{% endif %}" href="{% url 'inventory:parts' %}?low=1">
+    <span class="t-label">Out of stock</span>
+    <span class="t-value">{{ out_of_stock_count }}</span>
+    <span class="t-foot">nothing on the shelf</span>
+  </a>
+</div>
+
+{% comment %}
+  3. To do. Four fixed-height lists side by side; an asset fitted in a set
+  says which one, so a lapsed calibration reads as a line problem.
+{% endcomment %}
+<div class="section-title"><i class="bi bi-list-check"></i> To do</div>
+<div class="panel-row panel-row-4">
+  <div class="card">
+    <div class="card-head">
+      <i class="bi bi-rulers"></i> Calibration
+      <span class="badge {% if calibration_overdue_count %}badge-danger{% else %}badge-neutral{% endif %}">{{ calibration_due_count }}</span>
+      <span class="spacer sub">next 30 days</span>
+    </div>
+    <div class="rows scroll-list">
+      {% for plan in calibration_due %}
+      <a class="row-item" href="{{ plan.equipment.get_absolute_url }}"
+         title="{{ plan.equipment.name }} — {{ plan.name }}{% if plan.fitted_in %} · in {{ plan.fitted_in }}{% endif %}">
+        <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
+        <span class="mono">{{ plan.equipment.code }}</span>
+        <span class="row-main row-title">{% if plan.fitted_in %}<span class="in-set">{{ plan.fitted_in }}</span>{% else %}{{ plan.equipment.name }}{% endif %}</span>
+        <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
+      </a>
+      {% empty %}
+      <div class="empty"><i class="bi bi-check2-circle"></i><div class="title">All in date</div></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <i class="bi bi-calendar-check"></i> Maintenance
+      <span class="badge {% if maintenance_overdue_count %}badge-warning{% else %}badge-neutral{% endif %}">{{ maintenance_due_count }}</span>
+      <span class="spacer sub">next 7 days</span>
+    </div>
+    <div class="rows scroll-list">
+      {% for plan in maintenance_due %}
+      <a class="row-item" href="{{ plan.equipment.get_absolute_url }}"
+         title="{{ plan.equipment.name }} — {{ plan.name }}{% if plan.fitted_in %} · in {{ plan.fitted_in }}{% endif %}{% if plan.assignee %} · {{ plan.assignee.get_full_name }}{% endif %}">
+        <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
+        <span class="mono">{{ plan.equipment.code }}</span>
+        <span class="row-main row-title">{{ plan.name }}</span>
+        <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
+      </a>
+      {% empty %}
+      <div class="empty"><i class="bi bi-check2-circle"></i><div class="title">Nothing due</div></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <i class="bi bi-exclamation-triangle"></i> Incidents
+      <span class="badge {% if open_incident_count %}badge-danger{% else %}badge-neutral{% endif %}">{{ open_incident_count }}</span>
+      <span class="spacer sub">open</span>
+    </div>
+    <div class="rows scroll-list">
+      {% for incident in open_incidents %}
+      <a class="row-item" href="{{ incident.equipment.get_absolute_url }}" title="{{ incident.code }} — {{ incident.title }}">
+        <span class="dot dot-{{ incident.severity_badge_class|cut:'badge-' }}"></span>
+        <span class="mono">{{ incident.equipment.code }}</span>
+        <span class="row-main row-title">{{ incident.title }}</span>
+        <span class="badge {{ incident.status_badge_class }}">{{ incident.get_status_display }}</span>
+      </a>
+      {% empty %}
+      <div class="empty"><i class="bi bi-check2-circle"></i><div class="title">None open</div></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <i class="bi bi-nut"></i> Low stock
+      <span class="badge {% if low_stock_count %}badge-warning{% else %}badge-neutral{% endif %}">{{ low_stock_count }}</span>
+      <span class="spacer sub"><a href="{% url 'inventory:parts' %}?low=1">all</a></span>
+    </div>
+    <div class="rows scroll-list">
+      {% for item in low_stock_items %}
+      <a class="row-item" href="{{ item.get_absolute_url }}"
+         title="{{ item.name }} · {{ item.storage_location }} · reorder at {{ item.min_quantity|floatformat:"-2" }} {{ item.unit }}">
+        <span class="dot dot-{{ item.stock_badge_class|cut:'badge-' }}"></span>
+        <span class="mono">{{ item.code }}</span>
+        <span class="row-main row-title">{{ item.name }}</span>
+        <span class="stock-num {{ item.stock_cell_class }}">{{ item.quantity_on_hand|floatformat:"-2" }}/{{ item.min_quantity|floatformat:"-2" }}</span>
+      </a>
+      {% empty %}
+      <div class="empty"><i class="bi bi-check2-circle"></i><div class="title">All above reorder</div></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% comment %}
+  4. What changed lately, on one line each.
+{% endcomment %}
+<div class="dash-bottom">
+  <div class="card">
+    <div class="card-head">
+      <i class="bi bi-clock-history"></i> Recent activity
+      <span class="spacer"></span>
+      <a href="{% url 'activity' %}" class="small">See all <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="rows activity">
+      {% include "core/includes/activity_rows.html" %}
+    </div>
+  </div>
+</div>
+{% endblock %}

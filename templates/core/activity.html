@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Activity — {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Activity</h1>
+    <div class="sub">{% if activity|length == limit %}The latest {{ limit }} events{% else %}{{ activity|length }} event{{ activity|length|pluralize }}{% endif %}, newest first · adding, editing and deleting, status, stock, fitting, records and documents</div>
+  </div>
+</div>
+
+<div class="prod-tabs no-print" role="tablist">
+  {% for value, label in kinds %}
+  <a role="tab" class="prod-tab{% if value == kind %} is-on{% endif %}" href="?kind={{ value }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="card activity-page">
+  <div class="rows activity">
+    {% include "core/includes/activity_rows.html" %}
+  </div>
+</div>
+{% endblock %}

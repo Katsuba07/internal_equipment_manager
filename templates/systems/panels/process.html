@@ -1,0 +1,134 @@
+{% load crispy_forms_tags %}
+{% comment %}
+  One frame for a process: pick the set on the tabs, then each row is a role
+  and the machine fitted to it in that set. Managers also change the roles
+  themselves; technicians choose the machines.
+{% endcomment %}
+<div class="card panel-card" data-panel="process-{{ step.pk }}" data-panel-url="{% url 'systems:process_panel' step.pk %}{% if active_set %}?tab={{ active_set.pk }}{% endif %}" data-page-url="?process={{ step.pk }}{% if active_set %}&tab={{ active_set.pk }}{% endif %}">
+  <div class="card-head">
+    <span class="mono fw-600">{{ step }}</span>
+    <span class="subtle small">{{ step.process.name }}</span>
+    <span class="spacer"></span>
+    {% if user.is_admin %}
+    <a href="{% url 'systems:process_delete' step.pk %}" class="btn btn-sm btn-danger" title="Remove this process from the product"><i class="bi bi-trash"></i></a>
+    {% endif %}
+  </div>
+  <div class="card-body panel-crumbs small">
+    <a href="?product={{ step.product_id }}" hx-get="{% url 'systems:product_panel' step.product_id %}" hx-target="#panel" hx-push-url="?product={{ step.product_id }}">{{ step.product.code }}</a>
+    · {{ step.process.name }}
+  </div>
+
+  <div class="set-tabs" role="tablist">
+    {% for s in sets %}
+    <a href="?process={{ step.pk }}&tab={{ s.pk }}" role="tab"
+       class="set-tab{% if s == active_set %} is-on{% endif %}"
+       hx-get="{% url 'systems:process_panel' step.pk %}?tab={{ s.pk }}" hx-target="#panel" hx-push-url="?process={{ step.pk }}&tab={{ s.pk }}">
+      Set #{{ s.number }}{% if s.line %} <span class="subtle">· {{ s.line.name }}</span>{% endif %}
+    </a>
+    {% endfor %}
+    {% if user.can_record %}
+    <button type="button" class="set-tab set-tab-add" hx-post="{% url 'systems:set_add' step.pk %}">
+      <i class="bi bi-plus-lg"></i> Add set
+    </button>
+    {% endif %}
+  </div>
+
+  {% if user.can_record %}
+  <form hx-post="{% url 'systems:process_setup' step.pk %}{% if active_set %}?tab={{ active_set.pk }}{% endif %}" hx-target="#panel" novalidate>
+    {% csrf_token %}
+    {{ formset.management_form }}
+    {% if error %}<div class="alert alert-danger panel-alert"><i class="bi bi-exclamation-octagon"></i><div>{{ error }}</div></div>{% endif %}
+    {% if formset.non_form_errors %}<div class="alert alert-danger panel-alert"><i class="bi bi-exclamation-octagon"></i><div>{{ formset.non_form_errors|join:" " }}</div></div>{% endif %}
+
+    {% if active_set %}
+    <div class="card-body setup-line">
+      {{ line_form.line|as_crispy_field }}
+      <a class="small" href="?set={{ active_set.pk }}" hx-get="{% url 'systems:set_panel' active_set.pk %}" hx-target="#panel" hx-push-url="?set={{ active_set.pk }}">Readiness and history of set #{{ active_set.number }} <i class="bi bi-arrow-right"></i></a>
+    </div>
+    {% else %}
+    <div class="card-body small subtle">No set yet. Press <b>Add set</b> to choose its machines here.</div>
+    {% endif %}
+
+    <div class="setup-head">
+      <span>Role{% if user.can_manage %} (equipment type){% endif %}</span>
+      {% if active_set %}<span>Machine in set #{{ active_set.number }}</span>{% endif %}
+    </div>
+    <div id="roles-rows" class="setup-rows">
+      {% for f in formset %}
+      {% if f.instance.pk or user.can_manage %}
+      <div class="setup-row" data-qa-scope data-role-row>
+        {{ f.id }}
+        <div class="setup-role">
+          {% if user.can_manage %}
+          <div class="with-add tight grow">
+            <div class="grow">{{ f.category }}</div>
+            <button type="button" class="btn btn-default btn-icon" title="Add a new equipment type" data-quick-add="{% url 'quick_add' 'category' %}"><i class="bi bi-plus-lg"></i></button>
+          </div>
+          <label class="setup-flag" title="The set is not ready without it">{{ f.is_required }} Req.</label>
+          {% if f.instance.pk %}<label class="setup-flag setup-remove" title="Remove this role from every set">{{ f.DELETE }} Remove</label>{% endif %}
+          {% else %}
+          <span class="fw-600">{{ f.instance.name }}</span>
+          {% if not f.instance.is_required %}<span class="badge badge-neutral">optional</span>{% endif %}
+          {% endif %}
+        </div>
+        {% if f.category.errors %}<div class="invalid-feedback d-block">{{ f.category.errors|striptags }}</div>{% endif %}
+        {% if active_set %}
+        <div class="setup-eq">
+          {% include "core/_asset_picker.html" with name=f.equipment.html_name chosen=f.chosen_asset input_id=f.equipment.auto_id|add:"_search" source=f.picker_source empty_text=f.picker_empty %}
+          {% if f.equipment.errors %}<div class="invalid-feedback d-block">{{ f.equipment.errors|striptags }}</div>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% empty %}
+      <div class="card-body cell-muted">No roles yet.</div>
+      {% endfor %}
+    </div>
+
+    {% if user.can_manage %}
+    <template id="roles-empty">
+      {% with f=formset.empty_form %}
+      <div class="setup-row" data-qa-scope data-role-row>
+        {{ f.id }}
+        <div class="setup-role">
+          <div class="with-add tight grow">
+            <div class="grow">{{ f.category }}</div>
+            <button type="button" class="btn btn-default btn-icon" title="Add a new equipment type" data-quick-add="{% url 'quick_add' 'category' %}"><i class="bi bi-plus-lg"></i></button>
+          </div>
+          <label class="setup-flag">{{ f.is_required }} Req.</label>
+        </div>
+        {% if active_set %}
+        <div class="setup-eq">
+          {% include "core/_asset_picker.html" with name=f.equipment.html_name chosen=None input_id=f.equipment.auto_id|add:"_search" source=f.picker_source empty_text="" %}
+        </div>
+        {% endif %}
+      </div>
+      {% endwith %}
+    </template>
+    {% endif %}
+
+    <div class="card-body row-flex setup-save">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+      {% if user.can_manage %}
+      <button type="button" class="btn btn-default btn-sm" data-formset-add="roles"><i class="bi bi-plus-lg"></i> Add role</button>
+      {% if not step.roles.exists %}
+      <button type="button" class="btn btn-default btn-sm" hx-post="{% url 'systems:process_copy_template' step.pk %}">
+        <i class="bi bi-files"></i> Copy {{ step.process.code }} template
+      </button>
+      {% endif %}
+      {% endif %}
+    </div>
+  </form>
+  {% else %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Role</th>{% if active_set %}<th>Machine in set #{{ active_set.number }}</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for f in formset %}{% if f.instance.pk %}
+        <tr><td>{{ f.instance.name }}</td>{% if active_set %}<td>{% if f.chosen_asset %}<span class="mono">{{ f.chosen_asset.code }}</span> {{ f.chosen_asset.name }}{% else %}<span class="cell-muted">—</span>{% endif %}</td>{% endif %}</tr>
+        {% endif %}{% empty %}<tr><td class="cell-muted">No roles yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>

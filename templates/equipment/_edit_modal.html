@@ -1,0 +1,15 @@
+{% comment %}Edit asset in a dialog (see EquipmentUpdateView.get_template_names).{% endcomment %}
+<form method="post" action="{{ request.get_full_path }}" class="quick-add-form modal-wide" enctype="multipart/form-data" novalidate>
+  {% csrf_token %}
+  <div class="qa-head">
+    <span class="fw-600">Edit asset — <span class="mono">{{ object.code }}</span></span>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-qa-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="qa-body">
+    {% include "equipment/_form_fields.html" %}
+  </div>
+  <div class="qa-foot">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save changes</button>
+    <button type="button" class="btn btn-ghost" data-qa-close>Cancel</button>
+  </div>
+</form>

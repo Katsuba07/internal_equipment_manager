@@ -1,0 +1,39 @@
+# Môi trường ảo Python
+.venv/
+venv/
+
+# Cấu hình chứa khóa bí mật — KHÔNG bao giờ đưa lên kho mã nguồn
+.env
+
+# Dữ liệu thật: cơ sở dữ liệu, file người dùng tải lên, nhật ký
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.log
+
+# File tĩnh do collectstatic sinh ra
+staticfiles/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Hệ điều hành và trình soạn thảo
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# File tạm của Excel khi đang mở
+~$*.xlsx
+
+# Công cụ cục bộ: bản tải về khi rà soát (tài liệu công ty), bản đồ mã sinh tự động,
+# quyền riêng của từng máy
+.playwright-cli/
+graphify-out/
+.claude/settings.local.json
+*.graphify-bak

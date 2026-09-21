@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Not found — {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:36rem;margin:2rem auto">
+  <div class="card-body">
+    <div class="empty">
+      <i class="bi bi-signpost-split"></i>
+      <div class="title">This page is not here</div>
+      <div class="desc">The record may have been deleted, or the link is out of date.</div>
+      <a class="btn btn-primary btn-sm mt-2" href="{% url 'dashboard' %}"><i class="bi bi-house"></i> Back to the overview</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

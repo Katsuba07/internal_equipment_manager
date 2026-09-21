@@ -1,0 +1,16 @@
+{% comment %}
+  Search box for one asset (see [data-picker] in app.js).
+  name: field name · chosen: Equipment or None · source: search URL · input_id: id for the label
+{% endcomment %}
+<div class="picker" data-picker data-source="{{ source }}"{% if empty_text %} data-empty="{{ empty_text }}"{% endif %}>
+  <input type="hidden" name="{{ name }}" value="{{ chosen.pk|default:'' }}" data-picker-value>
+  <div class="picker-chosen"{% if not chosen %} hidden{% endif %} data-picker-chosen>
+    <i class="bi bi-box-seam"></i>
+    <span data-picker-label>{% if chosen %}<span class="mono fw-600">{{ chosen.code }}</span> {{ chosen.name }}{% endif %}</span>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-picker-clear title="Take it out or choose another" aria-label="Take it out or choose another"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <input type="text" id="{{ input_id }}" class="form-control picker-input"{% if chosen %} hidden{% endif %}
+         placeholder="Type Equipment ID, Asset No. or S/N" autocomplete="off" inputmode="search"
+         role="combobox" aria-expanded="false" aria-autocomplete="list" data-picker-input>
+  <div class="picker-list" hidden data-picker-list></div>
+</div>

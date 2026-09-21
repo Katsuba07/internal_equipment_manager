@@ -1,0 +1,17 @@
+{% comment %}Edit part in a dialog (see PartUpdateView.get_template_names).{% endcomment %}
+<form method="post" action="{{ request.get_full_path }}" class="quick-add-form modal-wide" enctype="multipart/form-data" novalidate>
+  {% csrf_token %}
+  <div class="qa-head">
+    <span class="fw-600">Edit part — <span class="mono">{{ object.code }}</span></span>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-qa-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="qa-body">
+    {% if form.non_field_errors %}<div class="alert alert-danger"><i class="bi bi-exclamation-octagon"></i><div>{{ form.non_field_errors }}</div></div>{% endif %}
+    {% include "inventory/_part_form_fields.html" %}
+    <p class="small subtle mb-0">Stock changes go through Receive / Issue, not this form.</p>
+  </div>
+  <div class="qa-foot">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save changes</button>
+    <button type="button" class="btn btn-ghost" data-qa-close>Cancel</button>
+  </div>
+</form>

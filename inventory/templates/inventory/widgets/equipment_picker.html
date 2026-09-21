@@ -1,0 +1,13 @@
+{# Type-ahead picker: a long dropdown would be unusable with hundreds of assets. #}
+<div class="picker" data-picker data-source="{{ source_url }}">
+  <input type="hidden" name="{{ widget.name }}" value="{{ widget.value|default_if_none:'' }}" data-picker-value>
+  <div class="picker-chosen"{% if not chosen %} hidden{% endif %} data-picker-chosen>
+    <i class="bi bi-box-seam"></i>
+    <span data-picker-label><span class="mono fw-600">{% if chosen %}{{ chosen.code }}{% endif %}</span>{% if chosen %} {{ chosen.name }}{% endif %}</span>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-picker-clear title="Choose another"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <input type="text" id="{{ widget.attrs.id }}" class="form-control picker-input"{% if chosen %} hidden{% endif %}
+         placeholder="Type a code or name — e.g. FIX-BAF1950" autocomplete="off"
+         role="combobox" aria-expanded="false" aria-autocomplete="list" data-picker-input>
+  <div class="picker-list" hidden data-picker-list></div>
+</div>

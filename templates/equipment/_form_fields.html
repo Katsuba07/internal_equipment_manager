@@ -1,0 +1,146 @@
+{% load crispy_forms_tags %}
+{% comment %}The asset form's fields — shared by the full page and the edit dialog.{% endcomment %}
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">
+    <i class="bi bi-exclamation-octagon"></i>
+    <div>{{ form.non_field_errors }}</div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-tag"></i> Identification</div>
+    <div class="card-body">
+      <div class="field-grid">
+        <div>{{ form.code|as_crispy_field }}</div>
+        <div>{{ form.asset_no|as_crispy_field }}</div>
+        <div>{{ form.serial_number|as_crispy_field }}</div>
+        <div class="span-all">{{ form.name|as_crispy_field }}</div>
+        <div class="with-add"><div class="grow">{{ form.category|as_crispy_field }}</div><div class="qa-col"><label aria-hidden="true">&nbsp;</label>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new category" data-quick-add="{% url 'quick_add' 'category' %}" data-target="id_category"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></div>
+        <div>{{ form.plant|as_crispy_field }}</div>
+        <div class="with-add"><div class="grow">{{ form.location|as_crispy_field }}</div><div class="qa-col"><label aria-hidden="true">&nbsp;</label>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new location" data-quick-add="{% url 'quick_add' 'location' %}" data-target="id_location"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-camera"></i> Photos</div>
+    <div class="card-body">
+      {% with photos=object.photos %}
+      {% if photos %}
+      <div class="form-photos">
+        {% for photo in photos %}
+        <label class="form-photo{% if photo.is_primary %} is-main{% endif %}" title="{% if photo.is_primary %}Main photo — {% endif %}tick × to delete on save">
+          <input type="checkbox" name="remove_photos" value="{{ photo.pk }}">
+          <img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt="">
+          <span class="form-photo-x" aria-label="Delete this photo"><i class="bi bi-x-lg"></i></span>
+          <span class="form-photo-gone">Deleted on save</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+      {{ form.photos|as_crispy_field }}
+      <div class="photo-stage" data-photo-stage-for="{{ form.photos.id_for_label }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-cpu"></i> Technical</div>
+    <div class="card-body">
+      <div class="field-grid">
+        <div>{{ form.manufacturer|as_crispy_field }}</div>
+        <div>{{ form.model_number|as_crispy_field }}</div>
+        <div>{{ form.year_made|as_crispy_field }}</div>
+        <div>{{ form.firmware_version|as_crispy_field }}</div>
+        <div class="span-all">{{ form.specifications|as_crispy_field }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    The asset's own parts list: which stocked parts it is built with and how
+    many. Bottom tier of a test system: part -> equipment -> product BOM.
+  {% endcomment %}
+  {{ parts_formset.management_form }}
+  <div class="card" id="parts">
+    <div class="card-head">
+      <i class="bi bi-nut"></i> Parts
+      <span class="spacer sub">spare parts this asset is built with</span>
+      <a href="{% url 'inventory:parts' %}" class="small" target="_blank">Spare parts list</a>
+    </div>
+    {% if parts_formset.non_form_errors %}
+    <div class="alert alert-danger"><i class="bi bi-exclamation-octagon"></i><div>{{ parts_formset.non_form_errors }}</div></div>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="data-table parts-table">
+        <thead><tr><th>Part</th><th style="width:8rem">Qty</th><th>Note</th><th style="width:4.5rem" class="text-end">Remove</th></tr></thead>
+        <tbody id="parts-rows">
+          {% for pform in parts_formset %}
+          <tr data-qa-scope>
+            <td><div class="with-add tight"><div class="grow">{{ pform.id }}{{ pform.item }}</div>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new spare part" data-quick-add="{% url 'quick_add' 'part' %}"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div>{% if pform.item.errors %}<div class="invalid-feedback d-block">{{ pform.item.errors|striptags }}</div>{% endif %}</td>
+            <td>{{ pform.quantity }}{% if pform.quantity.errors %}<div class="invalid-feedback d-block">{{ pform.quantity.errors|striptags }}</div>{% endif %}</td>
+            <td>{{ pform.notes }}</td>
+            <td class="text-end">{% if pform.instance.pk %}{{ pform.DELETE }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <template id="parts-empty">
+      <tr data-qa-scope>
+        <td><div class="with-add tight"><div class="grow">{{ parts_formset.empty_form.id }}{{ parts_formset.empty_form.item }}</div>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new spare part" data-quick-add="{% url 'quick_add' 'part' %}"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></td>
+        <td>{{ parts_formset.empty_form.quantity }}</td>
+        <td>{{ parts_formset.empty_form.notes }}</td>
+        <td></td>
+      </tr>
+    </template>
+    <div class="card-body">
+      <button type="button" class="btn btn-default btn-sm" id="parts-add" data-formset-add="parts"><i class="bi bi-plus-lg"></i> Add part row</button>
+      <span class="small subtle">Part not in the list yet? Press + New beside the dropdown.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-receipt"></i> Purchasing &amp; warranty</div>
+    <div class="card-body">
+      <div class="field-grid">
+        <div class="with-add"><div class="grow">{{ form.supplier|as_crispy_field }}</div><div class="qa-col"><label aria-hidden="true">&nbsp;</label>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new supplier" data-quick-add="{% url 'quick_add' 'supplier' %}" data-target="id_supplier"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></div>
+        <div>{{ form.purchase_date|as_crispy_field }}</div>
+        <div>{{ form.purchase_cost|as_crispy_field }}</div>
+        <div>{{ form.commissioned_date|as_crispy_field }}</div>
+        <div>{{ form.warranty_until|as_crispy_field }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-calendar-check"></i> Maintenance &amp; calibration</div>
+    <div class="card-body">
+      <div class="schedule-grid">
+        <div class="sched-tick">{{ form.maintenance_required|as_crispy_field }}</div>
+        <div>{{ form.maintenance_interval_days|as_crispy_field }}</div>
+        <div>{{ form.maintenance_last|as_crispy_field }}</div>
+        <div>{{ form.maintenance_next|as_crispy_field }}</div>
+        <div class="sched-tick">{{ form.is_measuring_device|as_crispy_field }}</div>
+        <div>{{ form.calibration_interval_months|as_crispy_field }}</div>
+        <div>{{ form.calibration_last|as_crispy_field }}</div>
+        <div>{{ form.calibration_next|as_crispy_field }}</div>
+      </div>
+      <p class="small subtle mb-0">Tick a schedule to open its dates. Change the last date and the next one is worked out from the interval; you can still type over it.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><i class="bi bi-three-dots"></i> Other</div>
+    <div class="card-body">
+      {{ form.notes|as_crispy_field }}
+      {% if not object %}
+      <p class="small subtle mb-0">
+        New assets start as <strong>Available / in storage</strong>. Use
+        <em>Change status</em> on the asset page to move it into production.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+

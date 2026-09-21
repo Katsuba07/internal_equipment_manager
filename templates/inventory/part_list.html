@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Spare parts — {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Spare parts</h1>
+    <div class="sub">
+      {{ total_count }} part{{ total_count|pluralize }}{% if has_filters %} matching your filters{% endif %}
+      {% if low_count %} · <a href="?low=1">{{ low_count }} at or below reorder point</a>{% endif %}
+    </div>
+  </div>
+  <div class="actions no-print">
+    {% if user.is_admin %}
+    <button type="button" class="btn btn-danger" data-bulk-delete="{% url 'inventory:part_bulk_delete' %}" hidden>
+      <i class="bi bi-trash"></i> <span>Delete selected (<span data-bulk-count>0</span>)</span>
+    </button>
+    {% endif %}
+    {% if user.can_manage %}
+    <a href="{% url 'inventory:part_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New part</a>
+    {% endif %}
+  </div>
+</div>
+
+<form method="get" class="toolbar no-print" data-autosubmit>
+  <div class="search-wrap">
+    <i class="bi bi-search"></i>
+    <input type="search" name="q" value="{{ request.GET.q }}" class="search-input" placeholder="Search part number, description, MPN...">
+  </div>
+  <select name="plant" class="form-select">
+    <option value="">All plants</option>
+    {% for value, label in plants %}
+    <option value="{{ value }}" {% if request.GET.plant == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="kind" class="form-select">
+    <option value="">All types</option>
+    {% for value, label in kinds %}
+    <option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label class="form-check" style="display:flex"><input type="checkbox" name="low" value="1" {% if request.GET.low %}checked{% endif %}> <span>Low stock only</span></label>
+  <label class="form-check" style="display:flex"><input type="checkbox" name="inactive" value="1" {% if request.GET.inactive %}checked{% endif %}> <span>Include inactive</span></label>
+  <button type="submit" class="btn btn-default lg-hide">Search</button>
+  {% if has_filters %}
+  <a href="{% url 'inventory:parts' %}" class="btn btn-ghost btn-sm"><i class="bi bi-x-lg"></i> Clear</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% if user.is_admin %}<th class="col-select"><input type="checkbox" data-bulk-all aria-label="Select all on this page"></th>{% endif %}
+          <th>Part number</th>
+          <th>Description</th>
+          <th>Type</th>
+          <th class="text-end">On hand</th>
+          <th class="text-end">Reorder at</th>
+          <th>Plant</th>
+          <th>Status</th>
+          <th>Bin</th>
+          <th class="text-end" title="Number of assets whose parts list includes this part">Used on</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for part in parts %}
+        <tr data-preview-url="{% url 'inventory:part_preview' part.pk %}">
+          {% if user.is_admin %}<td class="col-select"><input type="checkbox" value="{{ part.pk }}" data-bulk aria-label="Select {{ part.code }}"></td>{% endif %}
+          <td class="nowrap"><a class="mono fw-600" href="{{ part.get_absolute_url }}">{{ part.code }}</a></td>
+          <td>{{ part.name }}</td>
+          <td class="nowrap subtle">{{ part.get_kind_display }}</td>
+          <td class="text-end nowrap">{{ part.quantity_on_hand|floatformat:"-2" }} <span class="small subtle">{{ part.unit }}</span></td>
+          <td class="text-end subtle">{{ part.min_quantity|floatformat:"-2" }}</td>
+          <td class="nowrap subtle">{{ part.get_plant_display|default:"—" }}</td>
+          {% with status=part.stock_status %}<td class="nowrap"><span class="badge {{ status.1 }}">{{ status.0 }}</span></td>{% endwith %}
+          <td class="mono subtle">{{ part.storage_location|default:"—" }}</td>
+          <td class="text-end">{% if part.used_on %}{{ part.used_on }} asset{{ part.used_on|pluralize }}{% else %}<span class="cell-muted">—</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="{% if user.is_admin %}10{% else %}9{% endif %}">
+          <div class="empty">
+            <i class="bi bi-box-seam"></i>
+            <div class="title">No parts found</div>
+            <div class="desc">Add spare parts first, then list them on each asset's parts list.</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if is_paginated %}
+  <div class="pager">
+    <span class="subtle">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+    <div class="pages">
+      {% if page_obj.has_previous %}<a href="?{% if request.GET.q %}q={{ request.GET.q|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">‹</a>{% endif %}
+      <span class="current">{{ page_obj.number }}</span>
+      {% if page_obj.has_next %}<a href="?{% if request.GET.q %}q={{ request.GET.q|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">›</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
