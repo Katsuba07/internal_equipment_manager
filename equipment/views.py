@@ -17,7 +17,7 @@ from django_tables2 import SingleTableMixin
 
 from calibration.models import CalibrationPlan
 from core.bulk import BulkDeleteView
-from core.models import Attachment
+from core.models import Attachment, AttachmentKind
 from core.photos import remove_photos, save_photos
 from maintenance.models import MaintenancePlan
 from systems.models import Installation
@@ -251,10 +251,11 @@ class EquipmentCreateView(CanManageMixin, PartsFormsetMixin, CreateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        # Maintenance and calibration dates live on the plans; the form writes them.
         form.save_schedules(self.object)
         remove_photos(self.object, form.cleaned_data.get("remove_photos"))
         save_photos(self.object, form.cleaned_data.get("photos"), self.request.user)
+        remove_photos(self.object, form.cleaned_data.get("remove_nameplate_photos"), kind=AttachmentKind.NAMEPLATE)
+        save_photos(self.object, form.cleaned_data.get("nameplate_photos"), self.request.user, kind=AttachmentKind.NAMEPLATE)
         # Every asset starts its timeline with an opening entry, so the
         # history never begins mid-story.
         self.object.status_history.create(
@@ -286,10 +287,11 @@ class EquipmentUpdateView(CanManageMixin, PartsFormsetMixin, UpdateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        # Maintenance and calibration dates live on the plans; the form writes them.
         form.save_schedules(self.object)
         remove_photos(self.object, form.cleaned_data.get("remove_photos"))
         save_photos(self.object, form.cleaned_data.get("photos"), self.request.user)
+        remove_photos(self.object, form.cleaned_data.get("remove_nameplate_photos"), kind=AttachmentKind.NAMEPLATE)
+        save_photos(self.object, form.cleaned_data.get("nameplate_photos"), self.request.user, kind=AttachmentKind.NAMEPLATE)
         messages.success(self.request, f"Saved changes to {self.object.code}.")
         if wants_modal(self.request):
             return modal_saved()
