@@ -5,18 +5,43 @@ from decimal import Decimal
 from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
 
-from core.forms import PhotosField, offer_photo_removal, photos_to_remove_field, retire_field
+from core.forms import DateInput, PhotosField, offer_photo_removal, photos_to_remove_field, retire_field
 from core.models import Supplier
 from equipment.models import Equipment
 
 from .models import EquipmentPart, InventoryItem, ItemKind, StockTransaction, TransactionType
 
 
+class DatalistTextInput(forms.TextInput):
+    """
+    A plain text input with a browser-native <datalist> of suggestions.
+
+    Free text still works — this only offers suggestions, it doesn't
+    restrict input — so a newly typed value just becomes a future suggestion
+    once it's saved (see StockTransaction.reason_suggestions).
+    """
+
+    def __init__(self, options=None, attrs=None):
+        super().__init__(attrs)
+        self.options = options or []
+
+    def render(self, name, value, attrs=None, renderer=None):
+        attrs = dict(attrs or {})
+        list_id = f"{attrs.get('id', f'id_{name}')}_options"
+        attrs["list"] = list_id
+        input_html = super().render(name, value, attrs, renderer)
+        options_html = "".join(f'<option value="{escape(opt)}">' for opt in self.options)
+        return mark_safe(f'{input_html}<datalist id="{list_id}">{options_html}</datalist>')
+
+
 class PartForm(forms.ModelForm):
     """Create or edit a stocked part. The balance only changes through movements."""
 
-    photos = PhotosField(help_text="On a phone: take a picture or pick from the gallery. Tap again to add more; × takes one out before saving.")
+    photos = PhotosField()
     remove_photos = photos_to_remove_field()
 
     opening_stock = forms.DecimalField(
@@ -76,16 +101,25 @@ class EquipmentPicker(forms.Widget):
 
 
 class StockMovementForm(forms.ModelForm):
+    # Defaults to now (see clean_occurred_at) — only needed to log a movement
+    # after the fact, e.g. backdating a receipt to when stock actually arrived.
+    occurred_at = forms.DateTimeField(
+        label="Date", required=False, widget=DateInput(), input_formats=["%Y-%m-%d"]
+    )
+
     class Meta:
         model = StockTransaction
-        fields = ["transaction_type", "quantity", "equipment", "reason", "note"]
+        fields = ["transaction_type", "quantity", "equipment", "occurred_at", "reason", "note"]
         widgets = {
-            "reason": forms.TextInput(attrs={"placeholder": "e.g. Replaced worn probes on FIX-BAF1950"}),
             "note": forms.Textarea(attrs={"rows": 2}),
         }
 
     def __init__(self, *args, part=None, **kwargs):
         super().__init__(*args, **kwargs)
+        reasons = StockTransaction.reason_suggestions(part.kind) if part is not None else []
+        self.fields["reason"].widget = DatalistTextInput(
+            options=reasons, attrs={"placeholder": "e.g. Replaced worn probes on FIX-BAF1950"}
+        )
         source = reverse("equipment:search")
         if part is not None:
             source = f"{source}?part={part.pk}"
@@ -113,6 +147,9 @@ class StockMovementForm(forms.ModelForm):
         if quantity == 0 and self.data.get("transaction_type") != TransactionType.ADJUST:
             raise forms.ValidationError("Quantity must be more than zero.")
         return quantity
+
+    def clean_occurred_at(self):
+        return self.cleaned_data.get("occurred_at") or timezone.now()
 
 
 class EquipmentPartForm(forms.ModelForm):

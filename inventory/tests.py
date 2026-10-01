@@ -109,3 +109,61 @@ class StockTransactionTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             movement.full_clean()
+
+
+class StockTransactionRecalculateTests(TestCase):
+    """Editing or deleting a past movement must not let the ledger drift."""
+
+    def setUp(self):
+        self.item = InventoryItem.objects.create(
+            code="PRB-100-3A", name="Spring probe", unit="pcs",
+        )
+
+    def receive(self, quantity):
+        return StockTransaction(
+            item=self.item, transaction_type=TransactionType.IN, quantity=Decimal(quantity),
+        ).apply()
+
+    def issue(self, quantity):
+        return StockTransaction(
+            item=self.item, transaction_type=TransactionType.OUT, quantity=Decimal(quantity),
+        ).apply()
+
+    def test_editing_an_earlier_quantity_updates_every_later_balance(self):
+        first = self.receive(10)
+        second = self.issue(4)  # balance now 6
+
+        first.quantity = Decimal("20")
+        first.save()
+        StockTransaction.recalculate(self.item.pk)
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.item.refresh_from_db()
+        self.assertEqual(first.quantity_after, Decimal("20"))
+        self.assertEqual(second.quantity_after, Decimal("16"))
+        self.assertEqual(self.item.quantity_on_hand, Decimal("16"))
+
+    def test_deleting_a_movement_rebuilds_the_balance_from_what_remains(self):
+        self.receive(10)
+        second = self.issue(4)  # balance now 6
+        self.receive(5)  # balance 11
+
+        second.delete()
+        StockTransaction.recalculate(self.item.pk)
+
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity_on_hand, Decimal("15"))
+
+    def test_recalculate_refuses_a_result_that_goes_negative(self):
+        first = self.receive(10)
+        self.issue(8)  # balance 2, depends on the receipt above
+
+        first.quantity = Decimal("3")
+        first.save()
+        with self.assertRaises(ValidationError):
+            StockTransaction.recalculate(self.item.pk)
+
+        # The failed recalculation must not have partially applied.
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity_on_hand, Decimal("2"))

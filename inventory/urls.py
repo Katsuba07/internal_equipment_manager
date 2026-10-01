@@ -15,4 +15,6 @@ urlpatterns = [
     path("<int:pk>/edit/", views.PartUpdateView.as_view(), name="part_update"),
     path("<int:pk>/stock/", views.StockMovementView.as_view(), name="part_stock"),
     path("<int:pk>/delete/", views.PartDeleteView.as_view(), name="part_delete"),
+    path("movements/<int:pk>/edit/", views.StockMovementUpdateView.as_view(), name="movement_edit"),
+    path("movements/<int:pk>/delete/", views.StockMovementDeleteView.as_view(), name="movement_delete"),
 ]

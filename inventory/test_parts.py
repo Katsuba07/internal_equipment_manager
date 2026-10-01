@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import Product, Role
 from core.tests import BaseFixtureMixin
@@ -276,6 +277,97 @@ class IssueTargetTests(PartsTestBase):
         asset_page = self.client.get(reverse("equipment:detail", args=[self.equipment.pk]))
         self.assertContains(asset_page, "Parts issued to this asset")
         self.assertContains(asset_page, self.probe.code)
+
+
+class MovementEditDeleteTests(PartsTestBase):
+    """Correcting a mis-entered movement or a wrong stocktake."""
+
+    def setUp(self):
+        super().setUp()
+        self.receipt = StockTransaction(
+            item=self.probe, transaction_type=TransactionType.IN, quantity=Decimal("10"),
+        ).apply()
+        self.issue = StockTransaction(
+            item=self.probe, transaction_type=TransactionType.OUT, quantity=Decimal("4"),
+            equipment=self.equipment,
+        ).apply()  # balance now 6
+
+    def test_manager_can_backdate_a_movement(self):
+        """Needed to backfill history, e.g. syncing an old paper log."""
+        self.login(Role.MANAGER)
+        url = reverse("inventory:movement_edit", args=[self.receipt.pk])
+        response = self.client.post(url, {
+            "transaction_type": "IN", "quantity": "10", "occurred_at": "2020-01-15",
+        })
+        self.assertRedirects(response, self.probe.get_absolute_url())
+        self.receipt.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.receipt.occurred_at).date().isoformat(), "2020-01-15")
+
+    def test_leaving_the_date_blank_keeps_it_at_now(self):
+        self.login(Role.TECHNICIAN)
+        url = reverse("inventory:part_stock", args=[self.probe.pk])
+        self.client.post(url, {"transaction_type": "IN", "quantity": "5"})
+        newest = StockTransaction.objects.filter(item=self.probe, transaction_type="IN").latest("created_at")
+        self.assertAlmostEqual(
+            newest.occurred_at.timestamp(), timezone.now().timestamp(), delta=5
+        )
+
+    def test_manager_can_fix_a_mis_entered_quantity(self):
+        self.login(Role.MANAGER)
+        url = reverse("inventory:movement_edit", args=[self.issue.pk])
+        response = self.client.post(url, {
+            "transaction_type": "OUT", "quantity": "1", "equipment": self.equipment.pk,
+        })
+        self.assertRedirects(response, self.probe.get_absolute_url())
+        self.issue.refresh_from_db()
+        self.probe.refresh_from_db()
+        self.assertEqual(self.issue.quantity, Decimal("1"))
+        self.assertEqual(self.issue.quantity_after, Decimal("9"))
+        self.assertEqual(self.probe.quantity_on_hand, Decimal("9"))
+
+    def test_fixing_a_stocktake_updates_on_hand(self):
+        self.login(Role.MANAGER)
+        adjust = StockTransaction(
+            item=self.probe, transaction_type=TransactionType.ADJUST, quantity=Decimal("6"),
+            reason="Month-end count",
+        ).apply()
+        url = reverse("inventory:movement_edit", args=[adjust.pk])
+        response = self.client.post(url, {"transaction_type": "ADJUST", "quantity": "9"})
+        self.assertRedirects(response, self.probe.get_absolute_url())
+        self.probe.refresh_from_db()
+        self.assertEqual(self.probe.quantity_on_hand, Decimal("9"))
+
+    def test_technician_and_viewer_cannot_edit(self):
+        url = reverse("inventory:movement_edit", args=[self.issue.pk])
+        for role in (Role.TECHNICIAN, Role.VIEWER):
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(self.client.get(url).status_code, 302)
+
+    def test_admin_can_delete_a_movement(self):
+        self.login(Role.ADMIN)
+        url = reverse("inventory:movement_delete", args=[self.issue.pk])
+        response = self.client.post(url)
+        self.assertRedirects(response, self.probe.get_absolute_url())
+        self.assertFalse(StockTransaction.objects.filter(pk=self.issue.pk).exists())
+        self.probe.refresh_from_db()
+        self.assertEqual(self.probe.quantity_on_hand, Decimal("10"))
+
+    def test_manager_cannot_delete_only_admin_can(self):
+        self.login(Role.MANAGER)
+        url = reverse("inventory:movement_delete", args=[self.issue.pk])
+        self.assertEqual(self.client.get(url).status_code, 302)
+
+    def test_deleting_a_movement_that_would_go_negative_is_refused(self):
+        self.login(Role.ADMIN)
+        response = self.client.post(
+            reverse("inventory:movement_delete", args=[self.receipt.pk])
+        )
+        self.assertRedirects(response, self.probe.get_absolute_url())
+        # The delete must not have gone through.
+        self.assertTrue(StockTransaction.objects.filter(pk=self.receipt.pk).exists())
+        self.probe.refresh_from_db()
+        self.assertEqual(self.probe.quantity_on_hand, Decimal("6"))
 
 
 class EquipmentSearchTests(PartsTestBase):

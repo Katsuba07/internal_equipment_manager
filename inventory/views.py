@@ -168,7 +168,6 @@ class StockMovementView(CanRecordMixin, FormView):
             title=f"{kind} — {self.part.code}",
             subtitle=f"{self.part.name} · {self.part.quantity_on_hand:g} {self.part.unit} on hand",
             action=self.request.get_full_path(), submit="Record",
-            note="An issue needs the asset it goes to. For a stocktake, enter the counted quantity — it replaces the balance.",
         )
 
     def get(self, request, *args, **kwargs):
@@ -199,6 +198,94 @@ class StockMovementView(CanRecordMixin, FormView):
         if wants_modal(self.request):
             return modal_saved()
         return redirect(self.part.get_absolute_url())
+
+
+class StockMovementUpdateView(CanManageMixin, UpdateView):
+    """Fix a mis-entered movement — quantity, type, destination, etc.
+
+    Balances are rebuilt for the whole item afterwards (see
+    ``StockTransaction.recalculate``), so a correction anywhere in the
+    history stays consistent with every movement recorded after it.
+    """
+
+    model = StockTransaction
+    form_class = StockMovementForm
+    template_name = "inventory/stock_movement.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["part"] = self.object.item
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["part"] = self.object.item
+        context["editing"] = True
+        return context
+
+    def as_modal(self, form):
+        part = self.object.item
+        return render_modal(
+            self.request, form,
+            title=f"Edit movement — {part.code}",
+            subtitle=f"{part.name} · {part.quantity_on_hand:g} {part.unit} on hand",
+            action=self.request.get_full_path(), submit="Save",
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if wants_modal(request):
+            return self.as_modal(self.get_form())
+        return super().get(request, *args, **kwargs)
+
+    def form_invalid(self, form):
+        if wants_modal(self.request):
+            return self.as_modal(form)
+        return super().form_invalid(form)
+
+    def form_valid(self, form):
+        try:
+            with transaction.atomic():
+                movement = form.save()
+                StockTransaction.recalculate(movement.item_id)
+        except ValidationError as error:
+            form.add_error(None, error.messages[0])
+            return self.form_invalid(form)
+        messages.success(
+            self.request,
+            f"Updated movement for {movement.item.code} — balance recalculated.",
+        )
+        if wants_modal(self.request):
+            return modal_saved()
+        return redirect(movement.item.get_absolute_url())
+
+
+class StockMovementDeleteView(AdminRequiredMixin, View):
+    """Remove a wrongly recorded movement; the item's balance is rebuilt from what's left."""
+
+    def get(self, request, pk):
+        movement = get_object_or_404(StockTransaction, pk=pk)
+        return render(request, "systems/confirm_delete.html", {
+            "object": movement,
+            "kind": "Stock movement",
+            "summary": {"removed": [], "released": []},
+            "cancel_url": movement.item.get_absolute_url(),
+        })
+
+    def post(self, request, pk):
+        movement = get_object_or_404(StockTransaction, pk=pk)
+        item_id = movement.item_id
+        description = str(movement)
+        redirect_url = movement.item.get_absolute_url()
+        try:
+            with transaction.atomic():
+                movement.delete()
+                StockTransaction.recalculate(item_id)
+        except ValidationError as error:
+            messages.error(request, error.messages[0])
+            return redirect(redirect_url)
+        messages.success(request, f"Deleted movement — {description}.")
+        return redirect(redirect_url)
 
 
 class PartDeleteView(AdminRequiredMixin, View):

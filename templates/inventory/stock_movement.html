@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load crispy_forms_tags %}
 
-{% block title %}Stock movement — {{ part.code }}{% endblock %}
+{% block title %}{% if editing %}Edit movement{% else %}Stock movement{% endif %} — {{ part.code }}{% endblock %}
 
 {% block breadcrumb %}
 <nav class="crumbs">
@@ -14,7 +14,7 @@
 <div style="max-width:620px">
   <div class="page-head">
     <div>
-      <h1>Stock movement</h1>
+      <h1>{% if editing %}Edit movement{% else %}Stock movement{% endif %}</h1>
       <div class="sub"><span class="mono">{{ part.code }}</span> · {{ part.name }} · {{ part.quantity_on_hand|floatformat:"-2" }} {{ part.unit }} on hand</div>
     </div>
   </div>
@@ -23,9 +23,8 @@
       <form method="post" novalidate>
         {% csrf_token %}
         {{ form|crispy }}
-        <p class="small subtle">For a stocktake, enter the counted quantity — it replaces the balance.</p>
         <div class="row-flex mt-2">
-          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Record</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> {% if editing %}Save{% else %}Record{% endif %}</button>
           <a href="{{ part.get_absolute_url }}" class="btn btn-ghost">Cancel</a>
         </div>
       </form>

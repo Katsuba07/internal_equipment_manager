@@ -74,7 +74,7 @@
       <div class="card-head"><i class="bi bi-clock-history"></i> Stock movements</div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Date</th><th>Movement</th><th class="text-end">Qty</th><th class="text-end">Balance</th><th>Issued to</th><th>Reason</th><th>By</th></tr></thead>
+          <thead><tr><th>Date</th><th>Movement</th><th class="text-end">Qty</th><th class="text-end">Balance</th><th>Issued to</th><th>Reason</th><th>By</th>{% if user.can_manage or user.is_admin %}<th class="no-print"></th>{% endif %}</tr></thead>
           <tbody>
             {% for move in movements %}
             <tr>
@@ -82,12 +82,23 @@
               <td>{{ move.get_transaction_type_display }}</td>
               <td class="text-end">{% if move.transaction_type == "OUT" %}−{% elif move.transaction_type == "IN" %}+{% endif %}{{ move.quantity|floatformat:"-2" }}</td>
               <td class="text-end">{{ move.quantity_after|floatformat:"-2" }}</td>
-              <td class="nowrap">{% if move.equipment %}<a class="mono" href="{{ move.equipment.get_absolute_url }}">{{ move.equipment.code }}</a>{% else %}<span class="subtle">—</span>{% endif %}</td>
+              <td class="nowrap">{% if move.equipment %}<a class="mono" href="{{ move.equipment.get_absolute_url }}">{{ move.equipment.code }}</a> <span class="subtle">{{ move.equipment.name }}</span>{% else %}<span class="subtle">—</span>{% endif %}</td>
               <td>{{ move.reason }}</td>
               <td class="subtle nowrap">{{ move.performed_by.get_short_name|default:"" }}</td>
+              {% if user.can_manage or user.is_admin %}
+              <td class="nowrap text-end no-print">
+                {% if user.can_manage %}
+                <a href="{% url 'inventory:movement_edit' move.pk %}" class="btn btn-ghost btn-sm" title="Edit movement"
+                   data-modal-form="{% url 'inventory:movement_edit' move.pk %}"><i class="bi bi-pencil"></i></a>
+                {% endif %}
+                {% if user.is_admin %}
+                <a href="{% url 'inventory:movement_delete' move.pk %}" class="btn btn-ghost btn-sm" title="Delete movement"><i class="bi bi-trash"></i></a>
+                {% endif %}
+              </td>
+              {% endif %}
             </tr>
             {% empty %}
-            <tr><td colspan="7" class="cell-muted">No movements yet.</td></tr>
+            <tr><td colspan="8" class="cell-muted">No movements yet.</td></tr>
             {% endfor %}
           </tbody>
         </table>

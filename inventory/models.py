@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import F
+from django.db.models import Count, F
 from django.urls import reverse
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
@@ -32,7 +32,7 @@ class InventoryItem(AttachmentMixin, TimeStampedModel):
     """A stocked item: spare part, consumable, probe, or standby unit."""
 
     code = models.CharField("Part number", max_length=50, unique=True)
-    name = models.CharField("Description", max_length=200)
+    name = models.CharField("Name", max_length=200)
     kind = models.CharField(
         "Type", max_length=20, choices=ItemKind.choices, default=ItemKind.SPARE_PART
     )
@@ -140,8 +140,6 @@ class EquipmentPart(TimeStampedModel):
     One line of an asset's own parts list: which stocked part it is built
     with, and how many — e.g. fixture FIX-BAF1950 carries 120 x PRB-100-3A.
 
-    This is the bottom tier of a test system:
-    part (probe) -> equipment (fixture) -> BOM line (BAF1950 FCT).
     Declaring a part here does not move stock; issues go through
     StockTransaction.
     """
@@ -194,9 +192,10 @@ class StockTransaction(TimeStampedModel):
     """
     One receipt, issue, or adjustment.
 
-    Stock levels only ever change through ``apply`` below — never by editing
-    the quantity by hand — so the balance and the movement history can never
-    drift apart.
+    Stock levels only ever change through ``apply`` (new movement) or
+    ``recalculate`` (after editing/deleting a past movement) below — never by
+    editing ``InventoryItem.quantity_on_hand`` by hand — so the balance and
+    the movement history can never drift apart.
     """
 
     item = models.ForeignKey(
@@ -305,3 +304,61 @@ class StockTransaction(TimeStampedModel):
         self.quantity_after = new_quantity
         self.save()
         return self
+
+    @classmethod
+    def recalculate(cls, item_id):
+        """
+        Rebuild every movement's running balance and the item's on-hand total
+        from scratch, oldest first.
+
+        Needed after a movement is edited or deleted: ``quantity_after`` is a
+        running balance, so changing one entry invalidates every balance
+        recorded after it. Raises ``ValidationError`` (rolling back the
+        caller's transaction) if the result would take the item negative.
+        """
+        with transaction.atomic():
+            item = InventoryItem.objects.select_for_update().get(pk=item_id)
+            balance = Decimal("0")
+            changed = []
+            for movement in cls.objects.filter(item=item).order_by(
+                "occurred_at", "created_at", "pk"
+            ):
+                if movement.transaction_type == TransactionType.IN:
+                    balance += movement.quantity
+                elif movement.transaction_type == TransactionType.OUT:
+                    balance -= movement.quantity
+                    if balance < 0:
+                        raise ValidationError(
+                            f"Can't do that: {item.name} would go negative at the "
+                            f"{movement.occurred_at:%d %b %Y} issue. Fix or remove "
+                            f"that movement first."
+                        )
+                else:  # ADJUST: the counted quantity becomes the new balance
+                    balance = movement.quantity
+                if movement.quantity_after != balance:
+                    movement.quantity_after = balance
+                    changed.append(movement)
+            if changed:
+                cls.objects.bulk_update(changed, ["quantity_after"])
+            if item.quantity_on_hand != balance:
+                item.quantity_on_hand = balance
+                item.save(update_fields=["quantity_on_hand", "updated_at"])
+            return balance
+
+    @classmethod
+    def reason_suggestions(cls, kind, limit=20):
+        """
+        Past issue reasons for this kind of part, most used first.
+
+        Powers the reason dropdown on the issue form — typing a new reason
+        needs no extra step to "add" it, since the next issue of any part of
+        this kind will simply see it show up here too.
+        """
+        return list(
+            cls.objects.filter(item__kind=kind, transaction_type=TransactionType.OUT)
+            .exclude(reason="")
+            .values("reason")
+            .annotate(uses=Count("reason"))
+            .order_by("-uses", "reason")
+            .values_list("reason", flat=True)[:limit]
+        )
