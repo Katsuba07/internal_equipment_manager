@@ -3,6 +3,7 @@
 import django_filters
 from django import forms
 from django.db.models import Q
+from django.urls import reverse_lazy
 
 from core.models import Category, Location, Plant
 
@@ -13,6 +14,15 @@ SEARCH_ATTRS = {
     "class": "search-input",
     "placeholder": "Search equipment ID, asset no., S/N, name, model...",
     "autocomplete": "off",
+    # Live results while typing, without a full page reload — see #results
+    # in equipment_list.html.
+    "hx-get": reverse_lazy("equipment:list"),
+    "hx-trigger": "input changed delay:300ms",
+    "hx-include": "closest form",
+    "hx-target": "#results",
+    "hx-select": "#results",
+    "hx-swap": "outerHTML",
+    "hx-push-url": "true",
 }
 
 

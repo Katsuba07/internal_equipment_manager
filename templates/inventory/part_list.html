@@ -26,7 +26,9 @@
 <form method="get" class="toolbar no-print" data-autosubmit>
   <div class="search-wrap">
     <i class="bi bi-search"></i>
-    <input type="search" name="q" value="{{ request.GET.q }}" class="search-input" placeholder="Search part number, description, MPN...">
+    <input type="search" name="q" value="{{ request.GET.q }}" class="search-input" placeholder="Search part number, description, MPN..."
+           hx-get="{{ request.path }}" hx-trigger="input changed delay:300ms" hx-include="closest form"
+           hx-target="#results" hx-select="#results" hx-swap="outerHTML" hx-push-url="true">
   </div>
   <select name="plant" class="form-select">
     <option value="">All plants</option>
@@ -48,14 +50,14 @@
   {% endif %}
 </form>
 
-<div class="card">
+<div class="card" id="results">
   <div class="table-wrap">
     <table class="data-table">
       <thead>
         <tr>
           {% if user.is_admin %}<th class="col-select"><input type="checkbox" data-bulk-all aria-label="Select all on this page"></th>{% endif %}
           <th>Part number</th>
-          <th>Description</th>
+          <th>Name</th>
           <th>Type</th>
           <th class="text-end">On hand</th>
           <th class="text-end">Reorder at</th>

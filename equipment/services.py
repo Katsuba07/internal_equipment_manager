@@ -8,15 +8,21 @@ a management command when a bulk load is needed.
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
 
 from django.db import transaction
 from openpyxl import Workbook, load_workbook
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from PIL import Image as PILImage
 
 from core.models import Category, Location, Supplier
 
 from .models import Equipment, EquipmentStatus
+
+# Size, in pixels, of the photo dropped into each export row's first cell.
+PHOTO_CELL_PX = 64
 
 # Spreadsheet column → model field. The first three are required.
 COLUMNS = [
@@ -339,8 +345,32 @@ def import_equipment_from_xlsx(file_obj, user, update_existing: bool = False) ->
     return result
 
 
+def _embed_photo(sheet, cell_ref: str, attachment) -> None:
+    """Drop ``attachment``'s thumbnail into the cell, shrunk to fit it."""
+    if attachment is None or not attachment.thumbnail:
+        return
+    try:
+        with attachment.thumbnail.open("rb") as fh:
+            raw = fh.read()
+    except (FileNotFoundError, OSError):
+        return  # the file record exists but the file is missing on disk
+    try:
+        with PILImage.open(BytesIO(raw)) as source:
+            small = source.convert("RGB")
+            small.thumbnail((PHOTO_CELL_PX, PHOTO_CELL_PX))
+            width, height = small.size
+            buffer = BytesIO()
+            small.save(buffer, format="JPEG", quality=80)
+    except OSError:
+        return  # not a readable image
+    buffer.seek(0)
+    image = XLImage(buffer)
+    image.width, image.height = width, height
+    sheet.add_image(image, cell_ref)
+
+
 def export_equipment_to_xlsx(queryset) -> Workbook:
-    """Export the current (filtered) equipment list."""
+    """Export the current (filtered) equipment list, with each asset's main photo."""
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Equipment"
@@ -348,7 +378,7 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill("solid", fgColor="1F6FEB")
     headers = [
-        "Equipment ID", "Asset No.", "Name", "Category", "Location", "Status",
+        "Photo", "Equipment ID", "Asset No.", "Name", "Category", "Location", "Status",
         "Manufacturer", "Model", "Serial number", "Year",
         "Used for (products)", "Firmware version",
         "Purchase date", "Purchase cost (USD)", "In service since", "Warranty until",
@@ -360,11 +390,16 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         sheet.column_dimensions[get_column_letter(index)].width = max(len(label) + 4, 16)
+    sheet.column_dimensions["A"].width = PHOTO_CELL_PX / 7  # ~pixels-to-Excel-units
     sheet.row_dimensions[1].height = 30
-    sheet.freeze_panes = "A2"
+    sheet.freeze_panes = "B2"
 
-    for item in queryset.select_related("category", "location", "supplier"):
+    row_index = 2
+    for item in queryset.select_related(
+        "category", "location", "supplier"
+    ).prefetch_related("attachments"):
         sheet.append([
+            None,  # the photo is dropped in as a floating image, not a cell value
             item.code,
             item.asset_no,
             item.name,
@@ -386,13 +421,16 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
             item.specifications,
             item.notes,
         ])
+        _embed_photo(sheet, f"A{row_index}", item.main_photo)
+        sheet.row_dimensions[row_index].height = PHOTO_CELL_PX * 0.75  # px -> points
+        row_index += 1
 
-    date_columns = (12, 14, 15)  # purchase, in service, warranty
+    date_columns = (14, 16, 17)  # purchase date, in service since, warranty until
     for column in date_columns:
         for row in sheet.iter_rows(min_row=2, min_col=column, max_col=column):
             for cell in row:
                 cell.number_format = "YYYY-MM-DD"
-    for row in sheet.iter_rows(min_row=2, min_col=13, max_col=13):
+    for row in sheet.iter_rows(min_row=2, min_col=15, max_col=15):  # purchase cost
         for cell in row:
             cell.number_format = "#,##0.00"
 

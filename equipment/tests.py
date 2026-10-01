@@ -1,17 +1,31 @@
-"""Equipment tests: status changes and spreadsheet import."""
+"""Equipment tests: status changes and spreadsheet import/export."""
 
 import io
+import shutil
+import tempfile
+from datetime import date
+from decimal import Decimal
 
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from openpyxl import Workbook
+from PIL import Image as PILImage
 
 from core.models import Category, Location, Role, Supplier, User
+from core.photos import save_photo
 from equipment.models import Equipment, EquipmentStatus
-from equipment.services import HEADERS, import_equipment_from_xlsx
+from equipment.services import HEADERS, export_equipment_to_xlsx, import_equipment_from_xlsx
 
 PASSWORD = "test-pass-2026"
 BLANKS = [""] * (len(HEADERS) - 4)
+EXPORT_TEMP_MEDIA = tempfile.mkdtemp(prefix="ema-test-export-media-")
+
+
+def photo_file(color="red"):
+    buffer = io.BytesIO()
+    PILImage.new("RGB", (800, 600), color).save(buffer, format="PNG")
+    return SimpleUploadedFile("asset.png", buffer.getvalue(), content_type="image/png")
 
 
 def make_workbook(rows: list[list]) -> io.BytesIO:
@@ -234,6 +248,24 @@ class EquipmentFormTests(TestCase):
         self.assertEqual(asset.status_history.count(), 1)
         self.assertEqual(asset.status_history.first().reason, "Asset record created")
 
+    def test_the_new_asset_fields_are_saved(self):
+        self.client.login(username="manager", password=PASSWORD)
+        self.client.post(
+            reverse("equipment:create"),
+            {
+                "code": "ICT-FIX-020", "name": "Potting machine", "category": self.category.pk,
+                "country_of_origin": "China", "condition": "USED",
+                "voltage": "AC220V", "power_watt": "1800", "dimensions": "105 x 65 x 160",
+                "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
+            },
+        )
+        asset = Equipment.objects.get(code="ICT-FIX-020")
+        self.assertEqual(asset.country_of_origin, "China")
+        self.assertEqual(asset.condition, "USED")
+        self.assertEqual(asset.voltage, "AC220V")
+        self.assertEqual(asset.power_watt, 1800)
+        self.assertEqual(asset.dimensions, "105 x 65 x 160")
+
     def test_commissioned_date_before_purchase_date_is_rejected(self):
         from equipment.forms import EquipmentForm
 
@@ -247,3 +279,55 @@ class EquipmentFormTests(TestCase):
         })
         self.assertFalse(form.is_valid())
         self.assertIn("commissioned_date", form.errors)
+
+
+@override_settings(MEDIA_ROOT=EXPORT_TEMP_MEDIA)
+class ExportWithPhotosTests(TestCase):
+    """The .xlsx export drops each asset's main photo into its row."""
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(EXPORT_TEMP_MEDIA, ignore_errors=True)
+
+    def setUp(self):
+        category = Category.objects.create(code="TESTER", name="Test system")
+        self.with_photo = Equipment.objects.create(
+            code="FCT-STN-001", name="Has a photo", category=category
+        )
+        self.without_photo = Equipment.objects.create(
+            code="FCT-STN-002", name="No photo yet", category=category
+        )
+        save_photo(self.with_photo, photo_file(), None)
+
+    def test_export_embeds_the_main_photo(self):
+        workbook = export_equipment_to_xlsx(Equipment.objects.order_by("code"))
+        sheet = workbook.active
+        self.assertEqual(sheet.cell(row=1, column=1).value, "Photo")
+        self.assertEqual(sheet.cell(row=1, column=2).value, "Equipment ID")
+        self.assertEqual(len(sheet._images), 1)
+        self.assertEqual(sheet._images[0].anchor, "A2")  # row 2 == FCT-STN-001
+
+    def test_export_without_a_photo_does_not_crash(self):
+        workbook = export_equipment_to_xlsx(Equipment.objects.filter(pk=self.without_photo.pk))
+        sheet = workbook.active
+        self.assertEqual(len(sheet._images), 0)
+
+    def test_date_and_currency_columns_are_formatted_correctly(self):
+        self.with_photo.purchase_date = date(2024, 1, 15)
+        self.with_photo.purchase_cost = Decimal("1234.50")
+        self.with_photo.commissioned_date = date(2024, 2, 1)
+        self.with_photo.warranty_until = date(2026, 2, 1)
+        self.with_photo.save()
+
+        workbook = export_equipment_to_xlsx(Equipment.objects.filter(pk=self.with_photo.pk))
+        sheet = workbook.active
+        for column, label, fmt in [
+            (14, "Purchase date", "YYYY-MM-DD"),
+            (15, "Purchase cost (USD)", "#,##0.00"),
+            (16, "In service since", "YYYY-MM-DD"),
+            (17, "Warranty until", "YYYY-MM-DD"),
+        ]:
+            with self.subTest(column=label):
+                self.assertEqual(sheet.cell(row=1, column=column).value, label)
+                self.assertEqual(sheet.cell(row=2, column=column).number_format, fmt)
