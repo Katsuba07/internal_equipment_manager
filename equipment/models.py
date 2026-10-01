@@ -28,6 +28,13 @@ class EquipmentStatus(models.TextChoices):
     RETIRED = "RETIRED", "Retired"
 
 
+class EquipmentCondition(models.TextChoices):
+    """How the asset came to the company — not tracked after that."""
+
+    NEW = "NEW", "New"
+    USED = "USED", "Used"
+
+
 # Badge colour per status, shared by every screen.
 STATUS_BADGE_CLASS = {
     EquipmentStatus.IN_PRODUCTION: "badge-success",
@@ -117,7 +124,16 @@ class Equipment(AttachmentMixin, TimeStampedModel):
     specifications = models.TextField(
         "Specifications",
         blank=True,
-        help_text="Channel count, ranges, voltage, accuracy, test coverage...",
+        help_text="Channel count, ranges, accuracy, test coverage...",
+    )
+    voltage = models.CharField("Voltage", max_length=50, blank=True, help_text="e.g. AC220V")
+    power_watt = models.PositiveIntegerField("Power (W)", null=True, blank=True)
+    dimensions = models.CharField(
+        "Size, mm (L × W × H)", max_length=100, blank=True, help_text="e.g. 105 × 65 × 160"
+    )
+    country_of_origin = models.CharField("Country of origin", max_length=100, blank=True)
+    condition = models.CharField(
+        "Condition when received", max_length=10, choices=EquipmentCondition.choices, blank=True
     )
 
     # --- Status ---
@@ -150,20 +166,17 @@ class Equipment(AttachmentMixin, TimeStampedModel):
     maintenance_required = models.BooleanField(
         "Maintenance required",
         default=False,
-        help_text="Tick for assets on a scheduled maintenance round.",
     )
     maintenance_interval_days = models.PositiveIntegerField(
         "Maintenance every",
         null=True,
         blank=True,
         choices=[(7, "1 week"), (30, "1 month"), (90, "3 months"), (180, "6 months"), (365, "1 year")],
-        help_text="Used to keep this asset's scheduled maintenance plan up to date.",
     )
 
     is_measuring_device = models.BooleanField(
         "Requires calibration",
         default=False,
-        help_text="Turn on for measuring instruments that need scheduled calibration.",
     )
 
     notes = models.TextField("Notes", blank=True)

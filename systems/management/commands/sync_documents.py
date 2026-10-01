@@ -2,9 +2,9 @@
 Bring the product documents in line with the SharePoint TE folder.
 
 The folder is synced to this server by OneDrive (``EMA_DOCS_ROOT``). The
-Documents page does this by itself every couple of minutes; run it by hand
-after a big change, or once with ``--drop-local-copies`` to delete the copies
-the app kept before it read SharePoint directly.
+Products page does this by itself every couple of minutes; run it by hand
+after a big change. ``--drop-local-copies`` deletes files the app kept itself
+before it read SharePoint directly.
 
     manage.py sync_documents
     manage.py sync_documents --drop-local-copies

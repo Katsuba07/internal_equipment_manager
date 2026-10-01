@@ -23,7 +23,7 @@ from equipment.models import Equipment
 
 from .forms import AddProcessForm, ProductForm, RoleFormSet, RoleSetupFormSet, SetLineForm
 from .doc_sync import docs_root, folder_url, last_synced, maybe_sync
-from .models import DocumentSection, ProductDocument, ProductProcess, TestSet
+from .models import DocumentSection, ProductProcess, TestSet
 from .services import (
     apply_set_changes,
     busy_map,
@@ -99,7 +99,6 @@ class ProductsView(LoginRequiredMixin, View):
             "customers": Customer.objects.active().order_by("name"),
             "count_production": matching.filter(in_production=True).count(),
             "count_all": matching.count(),
-            "general_documents": ProductDocument.objects.filter(products=None).order_by("file_name"),
             "documents_synced": docs_root() is not None,
             "documents_checked": last_synced(),
             "sharepoint_folder": folder_url(),

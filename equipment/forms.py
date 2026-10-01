@@ -16,14 +16,15 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
     # The dates live on the asset's maintenance and calibration plans, not on
     # the asset; they are edited here all the same, since that is where people
     # look for them (see save_schedules).
-    photos = PhotosField(help_text="On a phone: take a picture or pick from the gallery. Tap again to add more; × takes one out before saving.")
+    photos = PhotosField()
     remove_photos = photos_to_remove_field()
+    nameplate_photos = PhotosField(label="Add nameplate / marking photos")
+    remove_nameplate_photos = photos_to_remove_field()
     maintenance_last = forms.DateField(label="Last maintenance", required=False, widget=DateInput())
     maintenance_next = forms.DateField(
         label="Next maintenance due", required=False,
         widget=DateInput(attrs={"data-next-from": "id_maintenance_last",
                                 "data-interval": "id_maintenance_interval_days", "data-unit": "days"}),
-        help_text="Filled in from the last one; change it if the round falls on another day.",
     )
     calibration_interval_months = forms.IntegerField(
         label="Calibration every (months)", required=False, min_value=1, max_value=120, initial=12,
@@ -40,8 +41,8 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
         model = Equipment
         fields = [
             "code", "asset_no", "serial_number", "name", "category", "plant", "location",
-            "manufacturer", "model_number", "year_made",
-            "firmware_version", "specifications",
+            "manufacturer", "model_number", "year_made", "country_of_origin", "condition",
+            "firmware_version", "specifications", "voltage", "power_watt", "dimensions",
             "supplier", "purchase_date", "purchase_cost",
             "commissioned_date", "warranty_until",
             "maintenance_required", "maintenance_interval_days",
@@ -55,6 +56,8 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 3}),
             "code": forms.TextInput(attrs={"placeholder": "e.g. CTV20200077"}),
             "asset_no": forms.TextInput(attrs={"placeholder": "e.g. 103220100359"}),
+            "voltage": forms.TextInput(attrs={"placeholder": "e.g. AC220V"}),
+            "dimensions": forms.TextInput(attrs={"placeholder": "e.g. 105 × 65 × 160"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -68,6 +71,7 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
         self.fields["supplier"].required = False
         self._load_schedules()
         offer_photo_removal(self)
+        offer_photo_removal(self, field="remove_nameplate_photos", attr="nameplate_photos")
         # Interval and dates only open once the tick says the schedule applies
         # (see [data-needs] in app.js); left shut, they are not sent at all.
         for tick, fields in (
@@ -224,10 +228,7 @@ class StatusChangeForm(RequestFormMixin, forms.Form):
 class EquipmentImportForm(forms.Form):
     """Bulk-load assets from a spreadsheet."""
 
-    file = forms.FileField(
-        label="Excel file (.xlsx)",
-        help_text="Download the template below, fill it in, then upload it here.",
-    )
+    file = forms.FileField(label="Excel file (.xlsx)")
     update_existing = forms.BooleanField(
         label="Update assets that already exist (matched on Equipment ID)",
         required=False,

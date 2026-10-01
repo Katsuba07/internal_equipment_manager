@@ -73,6 +73,16 @@ class PlantTests(BaseFixtureMixin, TestCase):
         self.assertNotIn("PONE01", body)
         self.assertIn("PTWO02", body)
 
+    def test_the_new_product_form_offers_a_plant_to_pick(self):
+        from core.models import Product
+
+        self.login(Role.MANAGER)
+        body = self.client.get(reverse("systems:product_create"), HTTP_HX_REQUEST="true").content.decode()
+        self.assertIn('name="plant"', body)
+        self.assertIn("CTV1", body)
+        self.client.post(reverse("systems:product_create"), {"code": "PTHREE1", "plant": "CTV1"})
+        self.assertEqual(Product.objects.get(code="PTHREE1").plant, "CTV1")
+
 
 class ScheduledMaintenanceTests(BaseFixtureMixin, TestCase):
     def asset_data(self, **extra):
@@ -141,7 +151,6 @@ class DashboardNumbersTests(BaseFixtureMixin, TestCase):
         body = response.content.decode()
         self.assertIn("Spare parts", body)
         self.assertIn("By plant:", body)
-        # Trimmed in 0.7.1: the fleet bar, the stock value and the due table are gone.
         for dropped in ("Fleet", "Stock value", "Falls due"):
             self.assertNotIn(dropped, body)
 

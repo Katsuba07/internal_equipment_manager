@@ -52,7 +52,7 @@ SECTION_FOLDERS = {
     DocumentSection.SCHEMATIC: "Schematic",
     DocumentSection.BOM: "BOM",
     DocumentSection.FIRMWARE: "Firmware",
-    DocumentSection.PCBA_DRAWING: "PCBA Drawing",
+    DocumentSection.PCBA_DRAWING: "PCBA drawing",
     DocumentSection.OTHER: "",
 }
 # Model code prefix -> customer code.

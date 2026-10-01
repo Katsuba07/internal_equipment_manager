@@ -58,34 +58,34 @@ def check_image(upload) -> None:
         upload.seek(0)
 
 
-def remove_photos(obj, photo_ids) -> int:
+def remove_photos(obj, photo_ids, kind=AttachmentKind.PHOTO) -> int:
     """Delete the ticked-off photos of ``obj``; another one takes over as main photo."""
     if not photo_ids:
         return 0
     content_type = ContentType.objects.get_for_model(obj)
     doomed = Attachment.objects.filter(
-        content_type=content_type, object_id=obj.pk, kind=AttachmentKind.PHOTO, pk__in=photo_ids
+        content_type=content_type, object_id=obj.pk, kind=kind, pk__in=photo_ids
     )
     count = 0
     for photo in doomed:
         photo.delete()          # the post_delete signal takes the files too
         count += 1
-    left = Attachment.objects.filter(content_type=content_type, object_id=obj.pk, kind=AttachmentKind.PHOTO)
+    left = Attachment.objects.filter(content_type=content_type, object_id=obj.pk, kind=kind)
     if left.exists() and not left.filter(is_primary=True).exists():
         make_primary(left.order_by("created_at").first())
     return count
 
 
-def save_photos(obj, uploads, user) -> int:
+def save_photos(obj, uploads, user, kind=AttachmentKind.PHOTO) -> int:
     """Store the photos picked on a form. Returns how many were saved."""
     saved = 0
     for upload in uploads or []:
-        save_photo(obj, upload, user)
+        save_photo(obj, upload, user, kind=kind)
         saved += 1
     return saved
 
 
-def save_photo(obj, upload, user) -> Attachment:
+def save_photo(obj, upload, user, kind=AttachmentKind.PHOTO) -> Attachment:
     """Check, shrink and store one uploaded image as a photo of ``obj``."""
     check_image(upload)
     try:
@@ -98,12 +98,12 @@ def save_photo(obj, upload, user) -> Attachment:
     base = os.path.splitext(os.path.basename(upload.name))[0][:100] or "photo"
     content_type = ContentType.objects.get_for_model(obj)
     has_main = Attachment.objects.filter(
-        content_type=content_type, object_id=obj.pk, kind=AttachmentKind.PHOTO, is_primary=True
+        content_type=content_type, object_id=obj.pk, kind=kind, is_primary=True
     ).exists()
     photo = Attachment(
         content_type=content_type,
         object_id=obj.pk,
-        kind=AttachmentKind.PHOTO,
+        kind=kind,
         original_name=upload.name[:255],
         uploaded_by=user if getattr(user, "is_authenticated", False) else None,
         is_primary=not has_main,
@@ -119,7 +119,7 @@ def save_photo(obj, upload, user) -> Attachment:
 @transaction.atomic
 def make_primary(photo: Attachment):
     Attachment.objects.filter(
-        content_type=photo.content_type_id, object_id=photo.object_id, kind=AttachmentKind.PHOTO
+        content_type=photo.content_type_id, object_id=photo.object_id, kind=photo.kind
     ).exclude(pk=photo.pk).update(is_primary=False)
     photo.is_primary = True
     photo.save(update_fields=["is_primary", "updated_at"])
@@ -141,8 +141,11 @@ def _target(app_label, model, pk):
     return get_object_or_404(content_type.model_class(), pk=pk)
 
 
+PHOTO_KINDS = {AttachmentKind.PHOTO, AttachmentKind.NAMEPLATE}
+
+
 class PhotoUploadView(CanRecordMixin, View):
-    def post(self, request, app_label, model, pk):
+    def post(self, request, app_label, model, pk, kind=AttachmentKind.PHOTO):
         try:
             obj = _target(app_label, model, pk)
         except (ValueError, ContentType.DoesNotExist):
@@ -151,38 +154,42 @@ class PhotoUploadView(CanRecordMixin, View):
         saved, problems = 0, []
         for upload in files:
             try:
-                save_photo(obj, upload, request.user)
+                save_photo(obj, upload, request.user, kind=kind)
                 saved += 1
             except ValidationError as error:
                 problems.append(error.messages[0])
+        noun = "nameplate photo" if kind == AttachmentKind.NAMEPLATE else "photo"
         if saved:
-            messages.success(request, f"Added {saved} photo{'s' if saved != 1 else ''}.")
+            messages.success(request, f"Added {saved} {noun}{'s' if saved != 1 else ''}.")
         for problem in problems:
             messages.error(request, problem)
         if not files:
             messages.error(request, "Choose one or more image files first.")
-        return redirect(obj.get_absolute_url() + "#photos")
+        anchor = "#nameplate" if kind == AttachmentKind.NAMEPLATE else "#photos"
+        return redirect(obj.get_absolute_url() + anchor)
 
 
 class PhotoPrimaryView(CanRecordMixin, View):
     def post(self, request, pk):
-        photo = get_object_or_404(Attachment, pk=pk, kind=AttachmentKind.PHOTO)
+        photo = get_object_or_404(Attachment, pk=pk, kind__in=PHOTO_KINDS)
         make_primary(photo)
-        return redirect(photo.content_object.get_absolute_url() + "#photos")
+        anchor = "#nameplate" if photo.kind == AttachmentKind.NAMEPLATE else "#photos"
+        return redirect(photo.content_object.get_absolute_url() + anchor)
 
 
 class PhotoDeleteView(CanManageMixin, View):
     def post(self, request, pk):
-        photo = get_object_or_404(Attachment, pk=pk, kind=AttachmentKind.PHOTO)
+        photo = get_object_or_404(Attachment, pk=pk, kind__in=PHOTO_KINDS)
         owner = photo.content_object
-        was_main = photo.is_primary
+        was_main, kind = photo.is_primary, photo.kind
         photo.delete()
         if was_main and owner is not None:
-            nxt = owner.photos[0] if owner.photos else None
-            if nxt:
-                make_primary(nxt)
+            remaining = owner.nameplate_photos if kind == AttachmentKind.NAMEPLATE else owner.photos
+            if remaining:
+                make_primary(remaining[0])
         messages.success(request, "Photo deleted.")
-        return redirect(owner.get_absolute_url() + "#photos") if owner else redirect("dashboard")
+        anchor = "#nameplate" if kind == AttachmentKind.NAMEPLATE else "#photos"
+        return redirect(owner.get_absolute_url() + anchor) if owner else redirect("dashboard")
 
 
 @login_required

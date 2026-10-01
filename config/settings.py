@@ -188,7 +188,7 @@ EMA_DOCS_SHAREPOINT_FOLDER = os.getenv(
 )
 # Plant given to a product first seen as a folder on the share.
 EMA_DOCS_DEFAULT_PLANT = os.getenv("EMA_DOCS_DEFAULT_PLANT", "CTV2")
-# How often an opened Documents page looks for changes in the synced folder.
+# How often the Products page re-reads the synced folder, in seconds.
 EMA_DOCS_RESCAN_SECONDS = int(os.getenv("EMA_DOCS_RESCAN_SECONDS", "120"))
 
 MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"

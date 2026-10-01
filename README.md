@@ -5,7 +5,7 @@ records, **products by customer with each process's equipment sets**, maintenanc
 incidents, spares, and calibration of measuring equipment — with the history an
 audit will ask for.
 
-**Current release: 0.9.4.** See the [roadmap](#roadmap) below.
+**Current release: 0.9.7.** See the [roadmap](#roadmap) below.
 
 > Installing or running it? Read **[OPERATIONS-GUIDE.md](OPERATIONS-GUIDE.md)** —
 > written for the person operating the system, no programming assumed.
@@ -242,6 +242,9 @@ enforcement against direct URL access**.
 | 0.9.2 | Products carry a plant (all existing ones set to CTV2); the Products page gets search (code, name or document name), customer and plant filters, and In production / All products tabs, with idle products on one compact line; the separate Documents page is gone: a product's documents open in tabs by type (TI, Test Spec, Schematic, BOM, Firmware …) with a link to its SharePoint folder | Done |
 | 0.9.3 | Products page: a click anywhere on a product's row opens it; the detail panel is wider and can be widened to the full page (remembered); a Back button returns to the previous panel (product, process, set) or from a form | Done |
 | 0.9.4 | Recent activity covers every log: equipment and spare parts added, edited (with the fields changed) or deleted, status changes, stock received/issued/counted, fitting, maintenance, calibration, incidents and documents added; the Overview panel shows 40 rows and scrolls, and an Activity page (See all) lists the latest 300 with a filter by kind | Done |
+| 0.9.5 | Review: every page checked for each role on a copy of the real data (no errors); a test posts to every URL as a viewer and confirms nothing changes; the admin site no longer asks for a missing icon; on-screen hints that repeated each other or the obvious are gone (and one that still said to move assets into production by hand); unused styles, empty placeholder files and outdated code comments removed | Done |
+| 0.9.6 | New fields found missing against a real asset-transfer spreadsheet: nameplate/marking photo kept in its own slot (separate from general Photos, so it is obvious which assets still need one), country of origin, condition when received (new/used), voltage, power (W) and size (L × W × H) | Done |
+| 0.9.7 | A stock movement can be corrected after the fact — edited or deleted, with every later balance on that part recalculated — and its reason picked from a list of past reasons for that kind of part (typing a new one adds it for next time); the equipment export (.xlsx) carries each asset's photo; the Equipment and Spare parts lists filter as you type; a list row still opens the quick-look panel, but its ID/code always opens the full page; a new process's starting roles are picked from a dropdown instead of typed codes | Done |
 | 0.8 | Maintenance log screens and calendar view | |
 | 0.8 | Incident reports and repair jobs, permission-checked attachments | |
 | 0.9 | Calibration screens, certificate attachments, QR labels, phone-friendly logging | |

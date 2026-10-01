@@ -120,3 +120,59 @@ class PhotoTests(BaseFixtureMixin, TestCase):
         path = Path(self.equipment.photos[0].file.path)
         self.equipment.delete()
         self.assertFalse(path.exists())
+
+    # --- nameplate photos: a second, separate slot -------------------------
+
+    def nameplate_url(self):
+        return reverse("nameplate_upload", args=["equipment", "equipment", self.equipment.pk])
+
+    def test_nameplate_photos_are_kept_apart_from_general_photos(self):
+        self.login(Role.TECHNICIAN)
+        self.upload(self.equipment_url(), image_file("a.png"))
+        self.upload(self.nameplate_url(), image_file("b.png", color="blue"))
+        self.assertEqual(len(self.equipment.photos), 1)
+        self.assertEqual(len(self.equipment.nameplate_photos), 1)
+        self.assertNotEqual(self.equipment.photos[0].pk, self.equipment.nameplate_photos[0].pk)
+
+    def test_nameplate_upload_redirects_to_its_own_anchor(self):
+        self.login(Role.TECHNICIAN)
+        response = self.upload(self.nameplate_url(), image_file())
+        self.assertRedirects(response, self.equipment.get_absolute_url() + "#nameplate", fetch_redirect_response=False)
+
+    def test_make_main_and_delete_a_nameplate_photo_only_touches_nameplate_photos(self):
+        self.login(Role.MANAGER)
+        self.upload(self.equipment_url(), image_file("g.png"))          # a general photo, untouched below
+        general = self.equipment.photos[0]
+        self.upload(self.nameplate_url(), image_file("a.png"), image_file("b.png"))
+        first, second = self.equipment.nameplate_photos
+        self.client.post(reverse("photo_primary", args=[second.pk]))
+        self.assertEqual(self.equipment.nameplate_photos[0].pk, second.pk)
+        self.client.post(reverse("photo_delete", args=[second.pk]))
+        self.assertEqual([p.pk for p in self.equipment.nameplate_photos], [first.pk])
+        self.assertTrue(self.equipment.nameplate_photos[0].is_primary)
+        self.assertEqual([p.pk for p in self.equipment.photos], [general.pk])   # unaffected
+
+    def test_equipment_detail_page_shows_the_nameplate_card(self):
+        self.login(Role.VIEWER)
+        body = self.client.get(self.equipment.get_absolute_url()).content.decode()
+        self.assertIn('id="nameplate"', body)
+        self.assertIn("No nameplate photo yet.", body)
+
+    def test_the_edit_form_offers_a_nameplate_photo_field(self):
+        self.login(Role.MANAGER)
+        body = self.client.get(reverse("equipment:update", args=[self.equipment.pk]),
+                               HTTP_HX_REQUEST="true").content.decode()
+        self.assertIn('name="nameplate_photos"', body)
+
+    def test_removing_a_nameplate_photo_on_the_edit_form_does_not_remove_general_photos(self):
+        self.login(Role.MANAGER)
+        self.upload(self.equipment_url(), image_file("g.png"))
+        self.upload(self.nameplate_url(), image_file("n.png"))
+        nameplate = self.equipment.nameplate_photos[0]
+        self.client.post(reverse("equipment:update", args=[self.equipment.pk]), {
+            "code": self.equipment.code, "name": self.equipment.name, "category": self.category.pk,
+            "remove_nameplate_photos": [str(nameplate.pk)],
+            "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
+        })
+        self.assertEqual(len(self.equipment.nameplate_photos), 0)
+        self.assertEqual(len(self.equipment.photos), 1)

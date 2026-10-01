@@ -67,7 +67,6 @@
               data-quick-add="{% url 'quick_add' 'systemtype' %}" data-target="id_process"><i class="bi bi-plus-lg"></i> New</button>
       <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add process</button>
     </div>
-    <div class="form-text">Added at the end of the route with its template roles and set #1. Use the arrows to reorder.</div>
   </form>
   {% endif %}
 </div>
@@ -114,7 +113,7 @@
       <input type="file" name="files" multiple required class="form-control">
       <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-cloud-upload"></i> Add to SharePoint</button>
     </div>
-    <div class="form-text">Goes into {{ product.code }}'s folder on SharePoint. A file with the same name replaces the old one; SharePoint keeps the old version.</div>
+    <div class="form-text">A file with the same name replaces the old one; SharePoint keeps the old version.</div>
     {% else %}
     <div class="form-text">Not available until the SharePoint folder is synced to this server.</div>
     {% endif %}

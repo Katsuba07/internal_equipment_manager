@@ -311,6 +311,7 @@ def attachment_upload_path(instance: "Attachment", filename: str) -> str:
 
 class AttachmentKind(models.TextChoices):
     PHOTO = "PHOTO", "Photo"
+    NAMEPLATE = "NAMEPLATE", "Nameplate / marking"
     MANUAL = "MANUAL", "Manual / datasheet"
     CERTIFICATE = "CERTIFICATE", "Calibration certificate"
     DRAWING = "DRAWING", "Drawing / wiring diagram"
@@ -387,15 +388,28 @@ class AttachmentMixin(models.Model):
     class Meta:
         abstract = True
 
+    def _photos_of(self, kind) -> list:
+        photos = [a for a in self.attachments.all() if a.kind == kind]
+        return sorted(photos, key=lambda a: (not a.is_primary, a.created_at))
+
     @property
     def photos(self) -> list:
         """Photos, main one first. Uses prefetched attachments when present."""
-        photos = [a for a in self.attachments.all() if a.kind == AttachmentKind.PHOTO]
-        return sorted(photos, key=lambda a: (not a.is_primary, a.created_at))
+        return self._photos_of(AttachmentKind.PHOTO)
 
     @property
     def main_photo(self):
         photos = self.photos
+        return photos[0] if photos else None
+
+    @property
+    def nameplate_photos(self) -> list:
+        """Photos of the nameplate/marking/tag — kept apart from the general Photos."""
+        return self._photos_of(AttachmentKind.NAMEPLATE)
+
+    @property
+    def main_nameplate_photo(self):
+        photos = self.nameplate_photos
         return photos[0] if photos else None
 
 

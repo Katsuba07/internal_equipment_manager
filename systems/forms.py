@@ -17,7 +17,6 @@ class ProductForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxSelectMultiple,
         label="Processes that need equipment",
-        help_text="Each gets its roles from the process template and one empty set (#1).",
     )
 
     class Meta:

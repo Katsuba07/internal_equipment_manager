@@ -78,8 +78,6 @@ SUPPLIERS = [
 ]
 
 # code, name, category, location, manufacturer, model, needs calibration, status.
-# Which products an asset serves is no longer a field here — it comes from the
-# test system set-ups the asset is given a role in.
 EQUIPMENT = [
     # --- In-circuit test ---
     ("ICT-SYS-001", "In-circuit tester", "ICT-TESTER", "ICT-RM", "Keysight", "i3070 Series 5i",
@@ -184,7 +182,6 @@ STOCK = [
 ]
 
 # Each asset's own parts list: equipment code, part number, quantity, note.
-# Bottom tier of a test system — part -> equipment -> product BOM.
 EQUIPMENT_PARTS = [
     ("FIX-BAF1950", "PRB-075-2A", 96, "Signal nets, top plate"),
     ("FIX-BAF1950", "PRB-100-3A", 24, "Power and ground nets"),
@@ -320,8 +317,7 @@ class Command(BaseCommand):
             ProductProcess.objects.all().delete()
             SystemType.objects.all().delete()
             Equipment.objects.all().delete()
-            # Products go last: set-ups reference them, and this also clears
-            # the placeholder rows the old free-text migration created.
+            # Products go last: their processes and sets reference them.
             Product.objects.all().delete()
             Customer.objects.all().delete()
 
@@ -386,9 +382,7 @@ class Command(BaseCommand):
         assets = {}
         for (code, name, cat, loc, maker, model, needs_cal, status) in EQUIPMENT:
             purchased = today - timedelta(days=random.randint(300, 2400))
-            # Instruments that live on a cart are recorded in the cart's room;
-            # which set-up they serve is a matter for the test system, not a
-            # parent field on the asset.
+            # Instruments that live on a cart are recorded in the cart's room.
             room = "FCT-RM" if loc.startswith("CART-") else loc
             asset, created = Equipment.objects.get_or_create(
                 code=code,
@@ -527,7 +521,7 @@ class Command(BaseCommand):
                 ).apply()
         self.stdout.write(self.style.SUCCESS(f"  {stock_count} stock items"))
 
-        # --- Test system set-ups ---
+        # --- Products, processes and sets ---
         summary = seed_systems(
             self.stdout, self.style, users, locations, categories, suppliers, assets
         )

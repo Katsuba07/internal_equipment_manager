@@ -103,6 +103,6 @@ def photos_to_remove_field() -> forms.MultipleChoiceField:
     return forms.MultipleChoiceField(required=False, label="", widget=forms.CheckboxSelectMultiple)
 
 
-def offer_photo_removal(form) -> None:
-    photos = form.instance.photos if form.instance.pk else []
-    form.fields["remove_photos"].choices = [(str(photo.pk), str(photo.pk)) for photo in photos]
+def offer_photo_removal(form, field: str = "remove_photos", attr: str = "photos") -> None:
+    photos = getattr(form.instance, attr) if form.instance.pk else []
+    form.fields[field].choices = [(str(photo.pk), str(photo.pk)) for photo in photos]

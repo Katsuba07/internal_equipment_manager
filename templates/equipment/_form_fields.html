@@ -46,22 +46,45 @@
   </div>
 
   <div class="card">
+    <div class="card-head"><i class="bi bi-upc-scan"></i> Nameplate / marking</div>
+    <div class="card-body">
+      {% with photos=object.nameplate_photos %}
+      {% if photos %}
+      <div class="form-photos">
+        {% for photo in photos %}
+        <label class="form-photo{% if photo.is_primary %} is-main{% endif %}" title="{% if photo.is_primary %}Main photo — {% endif %}tick × to delete on save">
+          <input type="checkbox" name="remove_nameplate_photos" value="{{ photo.pk }}">
+          <img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt="">
+          <span class="form-photo-x" aria-label="Delete this photo"><i class="bi bi-x-lg"></i></span>
+          <span class="form-photo-gone">Deleted on save</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+      {{ form.nameplate_photos|as_crispy_field }}
+      <div class="photo-stage" data-photo-stage-for="{{ form.nameplate_photos.id_for_label }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-head"><i class="bi bi-cpu"></i> Technical</div>
     <div class="card-body">
       <div class="field-grid">
         <div>{{ form.manufacturer|as_crispy_field }}</div>
         <div>{{ form.model_number|as_crispy_field }}</div>
         <div>{{ form.year_made|as_crispy_field }}</div>
+        <div>{{ form.country_of_origin|as_crispy_field }}</div>
+        <div>{{ form.condition|as_crispy_field }}</div>
         <div>{{ form.firmware_version|as_crispy_field }}</div>
+        <div>{{ form.voltage|as_crispy_field }}</div>
+        <div>{{ form.power_watt|as_crispy_field }}</div>
+        <div>{{ form.dimensions|as_crispy_field }}</div>
         <div class="span-all">{{ form.specifications|as_crispy_field }}</div>
       </div>
     </div>
   </div>
 
-  {% comment %}
-    The asset's own parts list: which stocked parts it is built with and how
-    many. Bottom tier of a test system: part -> equipment -> product BOM.
-  {% endcomment %}
   {{ parts_formset.management_form }}
   <div class="card" id="parts">
     <div class="card-head">
@@ -97,7 +120,6 @@
     </template>
     <div class="card-body">
       <button type="button" class="btn btn-default btn-sm" id="parts-add" data-formset-add="parts"><i class="bi bi-plus-lg"></i> Add part row</button>
-      <span class="small subtle">Part not in the list yet? Press + New beside the dropdown.</span>
     </div>
   </div>
 
@@ -127,7 +149,6 @@
         <div>{{ form.calibration_last|as_crispy_field }}</div>
         <div>{{ form.calibration_next|as_crispy_field }}</div>
       </div>
-      <p class="small subtle mb-0">Tick a schedule to open its dates. Change the last date and the next one is worked out from the interval; you can still type over it.</p>
     </div>
   </div>
 
@@ -135,12 +156,6 @@
     <div class="card-head"><i class="bi bi-three-dots"></i> Other</div>
     <div class="card-body">
       {{ form.notes|as_crispy_field }}
-      {% if not object %}
-      <p class="small subtle mb-0">
-        New assets start as <strong>Available / in storage</strong>. Use
-        <em>Change status</em> on the asset page to move it into production.
-      </p>
-      {% endif %}
     </div>
   </div>
 

@@ -46,12 +46,6 @@
 <div class="prod-tabs no-print" role="tablist">
   <a role="tab" class="prod-tab{% if not show_all %} is-on{% endif %}" href="?show=production{% if query %}&q={{ query|urlencode }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}">In production <span class="badge badge-neutral">{{ count_production }}</span></a>
   <a role="tab" class="prod-tab{% if show_all %} is-on{% endif %}" href="?show=all{% if query %}&q={{ query|urlencode }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}">All products <span class="badge badge-neutral">{{ count_all }}</span></a>
-  {% if general_documents %}
-  <span class="prod-general">
-    <i class="bi bi-folder2-open"></i> General:
-    {% for doc in general_documents %}<a href="{% url 'systems:document_open' doc.pk %}" target="_blank" rel="noopener">{{ doc.file_name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
-  </span>
-  {% endif %}
 </div>
 
 <div class="products-split" data-split>
@@ -149,7 +143,7 @@
       <div class="card panel-hint"><div class="empty">
         <i class="bi bi-hand-index"></i>
         <div class="title">Nothing selected</div>
-        <div class="desc">Click a set (#1, #2 …) to see its equipment and parts, a process code to edit its roles, or a product code for its route.</div>
+        <div class="desc">Click a product, a process or a set to see it here.</div>
       </div></div>
     {% endif %}
   </aside>

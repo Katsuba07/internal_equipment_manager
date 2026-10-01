@@ -32,7 +32,7 @@ class DeleteTestBase(BaseFixtureMixin, TestCase):
 
 class SingleDeleteTests(DeleteTestBase):
     def test_an_asset_with_history_can_be_deleted(self):
-        # Used to fail: the logs protect the asset row.
+        # Its logs hold the asset with PROTECT; they go first.
         self.add_history(self.other)
         self.login(Role.ADMIN)
         response = self.client.post(reverse("equipment:delete", args=[self.other.pk]))
@@ -102,8 +102,7 @@ class BulkDeleteTests(DeleteTestBase):
 
 class AdminSiteTests(DeleteTestBase):
     def test_the_administrator_role_can_delete_in_the_admin(self):
-        # An Administrator who is not a superuser used to reach the admin site
-        # with no permissions at all, so nothing could be deleted there.
+        # The role alone grants the admin site's permissions, no superuser flag needed.
         admin_user = self.users[Role.ADMIN]
         self.assertFalse(admin_user.is_superuser)
         self.login(Role.ADMIN)

@@ -111,6 +111,26 @@
             <div class="v mono {% if not equipment.firmware_version %}empty{% endif %}">{{ equipment.firmware_version|default:"—" }}</div>
           </div>
           <div>
+            <div class="k">Country of origin</div>
+            <div class="v {% if not equipment.country_of_origin %}empty{% endif %}">{{ equipment.country_of_origin|default:"—" }}</div>
+          </div>
+          <div>
+            <div class="k">Condition when received</div>
+            <div class="v {% if not equipment.condition %}empty{% endif %}">{{ equipment.get_condition_display|default:"—" }}</div>
+          </div>
+          <div>
+            <div class="k">Voltage</div>
+            <div class="v {% if not equipment.voltage %}empty{% endif %}">{{ equipment.voltage|default:"—" }}</div>
+          </div>
+          <div>
+            <div class="k">Power</div>
+            <div class="v {% if not equipment.power_watt %}empty{% endif %}">{% if equipment.power_watt %}{{ equipment.power_watt }} W{% else %}—{% endif %}</div>
+          </div>
+          <div>
+            <div class="k">Size (L × W × H, mm)</div>
+            <div class="v {% if not equipment.dimensions %}empty{% endif %}">{{ equipment.dimensions|default:"—" }}</div>
+          </div>
+          <div>
             <div class="k">Fitted in</div>
             <div class="v {% if not usage.current_installation %}empty{% endif %}">
               {% with inst=usage.current_installation %}
@@ -291,6 +311,8 @@
   <div class="stack">
     {% url 'photo_upload' 'equipment' 'equipment' equipment.pk as upload_url %}
     {% include "core/_photos.html" with obj=equipment upload_url=upload_url %}
+    {% url 'nameplate_upload' 'equipment' 'equipment' equipment.pk as nameplate_upload_url %}
+    {% include "core/_nameplate.html" with obj=equipment upload_url=nameplate_upload_url %}
     {% if usage.history %}
     <div class="card no-print">
       <div class="card-head"><i class="bi bi-arrow-left-right"></i> Fitting history</div>
