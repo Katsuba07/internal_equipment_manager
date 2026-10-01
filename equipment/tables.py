@@ -14,10 +14,11 @@ class AssetColumn(tables.Column):
     without two columns' worth of horizontal space."""
 
     def render(self, value, record):
+        # Only the ID navigates to the detail page; the name is plain text —
+        # clicking it opens the row's quick-look preview instead (see app.js).
         return format_html(
-            '<a class="cell-link" href="{}">'
-            '<span class="mono cell-id">{}</span>'
-            '<span class="cell-sub">{}</span></a>',
+            '<a class="mono cell-id" href="{}">{}</a>'
+            '<span class="cell-sub">{}</span>',
             record.get_absolute_url(),
             record.code,
             record.name,
@@ -37,8 +38,8 @@ class ProductsColumn(tables.Column):
     """
     Which product codes this asset helps test.
 
-    Derived from the set-ups it is assigned to, so a shared instrument shows
-    every code rather than the single free-text value it used to carry.
+    Derived from the sets it is fitted to, so a shared instrument shows every
+    code it serves.
     """
 
     def render(self, value, record):

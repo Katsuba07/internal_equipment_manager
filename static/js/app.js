@@ -1,12 +1,10 @@
-/* Equipment Manager — the small amount of interactivity the UI needs.
-   No framework: a theme switch, a mobile drawer, and dropdown menus. */
+/* Equipment Manager — the page behaviour the UI needs, without a framework. */
 
 (function () {
   "use strict";
 
   /* ---------- Theme ---------- */
-  // The inline script in <head> has already applied the stored theme, so the
-  // page never flashes the wrong colours. This part only handles toggling.
+  // The inline script in <head> applies the stored theme; this only toggles it.
 
   var root = document.documentElement;
 
@@ -111,13 +109,30 @@
   });
 
   /* ---------- Filters apply on change ---------- */
-  // Selecting a filter submits straight away; nobody should have to find a
-  // separate "apply" button after every choice.
+  // Selecting a filter submits straight away.
 
   document.querySelectorAll("[data-autosubmit] select, [data-autosubmit] input[type=checkbox]").forEach(function (select) {
     select.addEventListener("change", function () {
       select.form.requestSubmit ? select.form.requestSubmit() : select.form.submit();
     });
+  });
+
+  /* ---------- Role picker: add an equipment type without typing its code ---------- */
+  // <select data-role-picker-select> next to <textarea data-role-picker-textarea>,
+  // both inside [data-role-picker] (see RolePickerWidget) — picking an option
+  // appends its code as a new line and resets the dropdown.
+
+  document.addEventListener("change", function (event) {
+    var select = event.target.closest("[data-role-picker-select]");
+    if (!select || !select.value) return;
+    var picker = select.closest("[data-role-picker]");
+    var textarea = picker && picker.querySelector("[data-role-picker-textarea]");
+    if (!textarea) return;
+    var lines = textarea.value.split("\n").filter(function (line) { return line.trim() !== ""; });
+    lines.push(select.value);
+    textarea.value = lines.join("\n");
+    select.value = "";
+    textarea.scrollTop = textarea.scrollHeight;
   });
 
   /* ---------- "Add row" for any formset ---------- */
@@ -328,7 +343,7 @@
       if (event.target.closest("[data-preview-close]")) { closePreview(); return; }
       var row = event.target.closest("tr[data-preview-url]");
       if (!row || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (event.target.closest("button, input, select, textarea, label, form, .col-select")) return;
+      if (event.target.closest("a, button, input, select, textarea, label, form, .col-select")) return;
       event.preventDefault();
       if (previewRow === row && drawer.classList.contains("open")) { closePreview(); return; }
       if (previewRow) previewRow.classList.remove("row-sel");
@@ -497,10 +512,8 @@
   });
 
   /* ---------- Asset picker (issue a part to an asset) ---------- */
-  // A dropdown of every asset would be a scroll hunt, so the field is a search
-  // box: it asks the server as you type and shows at most twenty matches. The
-  // assets that carry this part are listed first, and before anything is typed
-  // they are the whole list.
+  // A search box instead of a dropdown of every asset: at most twenty matches,
+  // the assets that carry this part first.
 
   var pickerTimer = null;
 
@@ -782,9 +795,8 @@
   }
 
   /* ---------- Photos on a form: add more, take one out before saving ---------- */
-  // A phone's camera hands back one picture per tap, and a file box normally
-  // forgets the last pick when a new one is made. Here every pick is added to
-  // the ones before; the previews show what will be saved, each with its ×.
+  // Each pick is added to the ones before (a phone's camera hands back one
+  // picture per tap); the previews show what will be saved, each with its ×.
 
   function sameFile(a, b) {
     return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;

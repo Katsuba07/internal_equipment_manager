@@ -12,6 +12,8 @@ from django import forms
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
 from django.views import View
 
 from .mixins import CanManageMixin
@@ -69,17 +71,46 @@ class SupplierQuickForm(CodeUpperMixin, forms.ModelForm):
         fields = ["code", "name", "contact_person", "phone", "email"]
 
 
+class RolePickerWidget(forms.Textarea):
+    """
+    The textarea itself, plus a dropdown of equipment types above it.
+
+    Picking one from the dropdown appends its code as a new line, so people
+    choose from a list instead of having to know the exact codes by heart.
+    The textarea stays live underneath — typing, reordering or deleting
+    lines by hand still works exactly as before (see data-role-picker in
+    app.js).
+    """
+
+    def render(self, name, value, attrs=None, renderer=None):
+        attrs = dict(attrs or {})
+        attrs["data-role-picker-textarea"] = ""
+        textarea_html = super().render(name, value, attrs, renderer)
+        options = "".join(
+            f'<option value="{escape(code)}">{escape(code)} — {escape(cat_name)}</option>'
+            for code, cat_name in Category.objects.active().order_by("code").values_list("code", "name")
+        )
+        return mark_safe(
+            '<div data-role-picker>'
+            '<select class="form-select mb-1" data-role-picker-select>'
+            f'<option value="">+ Add an equipment type…</option>{options}'
+            "</select>"
+            f"{textarea_html}"
+            "</div>"
+        )
+
+
 class SystemTypeQuickForm(CodeUpperMixin, forms.ModelForm):
     roles = forms.CharField(
         label="Roles",
-        widget=forms.Textarea(attrs={
+        widget=RolePickerWidget(attrs={
             "rows": 7,
             "placeholder": "CART\nCTRL\nFIX-FCT\nPC\nMON\nDMM\nPSU",
         }),
         help_text=(
-            "The starting roles: one equipment-type code per line, in order (the same "
-            "code twice gives two roles, e.g. PSU 1 and PSU 2). Each product can change "
-            "its own list later."
+            "Pick from the dropdown, or type codes directly — one per line, in order "
+            "(the same code twice gives two roles, e.g. PSU 1 and PSU 2). Each product "
+            "can change its own list later."
         ),
     )
 
