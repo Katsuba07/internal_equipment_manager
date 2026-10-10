@@ -28,13 +28,6 @@ class EquipmentStatus(models.TextChoices):
     RETIRED = "RETIRED", "Retired"
 
 
-class EquipmentCondition(models.TextChoices):
-    """How the asset came to the company — not tracked after that."""
-
-    NEW = "NEW", "New"
-    USED = "USED", "Used"
-
-
 # Badge colour per status, shared by every screen.
 STATUS_BADGE_CLASS = {
     EquipmentStatus.IN_PRODUCTION: "badge-success",
@@ -61,11 +54,8 @@ class EquipmentQuerySet(models.QuerySet):
         """Everything except retired assets."""
         return self.exclude(status=EquipmentStatus.RETIRED)
 
-    def measuring_devices(self):
-        return self.filter(is_measuring_device=True)
-
     def with_related(self):
-        return self.select_related("category", "location", "supplier")
+        return self.select_related("category", "location")
 
 
 class Equipment(AttachmentMixin, TimeStampedModel):
@@ -125,22 +115,10 @@ class Equipment(AttachmentMixin, TimeStampedModel):
     model_number = models.CharField("Model", max_length=150, blank=True)
     serial_number = models.CharField("Serial number", max_length=150, blank=True)
     year_made = models.PositiveIntegerField("Year of manufacture", null=True, blank=True)
-    firmware_version = models.CharField(
-        "Firmware / software version", max_length=100, blank=True
-    )
     specifications = models.TextField(
         "Specifications",
         blank=True,
         help_text="Channel count, ranges, accuracy, test coverage...",
-    )
-    voltage = models.CharField("Voltage", max_length=50, blank=True, help_text="e.g. AC220V")
-    power_watt = models.PositiveIntegerField("Power (W)", null=True, blank=True)
-    dimensions = models.CharField(
-        "Size, mm (L × W × H)", max_length=100, blank=True, help_text="e.g. 105 × 65 × 160"
-    )
-    country_of_origin = models.CharField("Country of origin", max_length=100, blank=True)
-    condition = models.CharField(
-        "Condition when received", max_length=10, choices=EquipmentCondition.choices, blank=True
     )
 
     # --- Status ---
@@ -152,22 +130,6 @@ class Equipment(AttachmentMixin, TimeStampedModel):
         db_index=True,
     )
     status_changed_at = models.DateTimeField("Status changed at", default=timezone.now)
-
-    # --- Purchasing and warranty ---
-    supplier = models.ForeignKey(
-        "core.Supplier",
-        verbose_name="Supplier",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="equipments",
-    )
-    purchase_date = models.DateField("Purchase date", null=True, blank=True)
-    purchase_cost = models.DecimalField(
-        "Purchase cost (USD)", max_digits=15, decimal_places=2, null=True, blank=True
-    )
-    commissioned_date = models.DateField("In service since", null=True, blank=True)
-    warranty_until = models.DateField("Warranty until", null=True, blank=True)
 
     # --- Calibration ---
     maintenance_required = models.BooleanField(
@@ -236,18 +198,6 @@ class Equipment(AttachmentMixin, TimeStampedModel):
         from urllib.parse import quote
 
         return settings.EMA_LABEL_QR_URL.replace("{code}", quote(self.code, safe=""))
-
-    @property
-    def is_under_warranty(self) -> bool:
-        return bool(self.warranty_until and self.warranty_until >= timezone.localdate())
-
-    @property
-    def age_years(self) -> float | None:
-        """Years in service, counted from commissioning (or purchase)."""
-        start = self.commissioned_date or self.purchase_date
-        if not start:
-            return None
-        return round((timezone.localdate() - start).days / 365.25, 1)
 
     @property
     def plant_display(self) -> str:

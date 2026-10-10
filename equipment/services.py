@@ -61,10 +61,6 @@ class ImportResult:
     def has_errors(self) -> bool:
         return bool(self.errors)
 
-    @property
-    def total_processed(self) -> int:
-        return self.created + self.updated
-
 
 def _clean(value):
     if value is None:
@@ -349,9 +345,7 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
     sheet.freeze_panes = "B2"
 
     row_index = 2
-    for item in queryset.select_related(
-        "category", "location", "supplier"
-    ).prefetch_related("attachments"):
+    for item in queryset.select_related("category", "location").prefetch_related("attachments"):
         sheet.append([
             None,  # the photo is dropped in as a floating image, not a cell value
             item.code,

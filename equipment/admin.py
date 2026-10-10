@@ -32,8 +32,7 @@ class EquipmentAdmin(SimpleHistoryAdmin):
     search_fields = (
         "code", "name", "serial_number", "model_number", "manufacturer",
     )
-    autocomplete_fields = ("category", "location", "supplier")
-    date_hierarchy = "purchase_date"
+    autocomplete_fields = ("category", "location")
     inlines = [StatusHistoryInline, AttachmentInline]
     readonly_fields = ("status_changed_at", "created_at", "updated_at")
 
@@ -44,7 +43,7 @@ class EquipmentAdmin(SimpleHistoryAdmin):
             {
                 "fields": (
                     "manufacturer", "model_number", "serial_number", "year_made",
-                    "firmware_version", "specifications",
+                    "specifications",
                 )
             },
         ),
@@ -54,15 +53,6 @@ class EquipmentAdmin(SimpleHistoryAdmin):
                 "fields": ("status", "status_changed_at"),
                 "description": "Changing status here does NOT record a reason. "
                 "Prefer the 'Change status' action in the main application.",
-            },
-        ),
-        (
-            "Purchasing & warranty",
-            {
-                "fields": (
-                    "supplier", "purchase_date", "purchase_cost",
-                    "commissioned_date", "warranty_until",
-                )
             },
         ),
         ("Calibration", {"fields": ("is_measuring_device",)}),

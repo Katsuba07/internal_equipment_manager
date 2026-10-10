@@ -53,11 +53,6 @@ class RequestFormMixin:
         self.request = request
         super().__init__(*args, **kwargs)
 
-    @property
-    def current_user(self):
-        user = getattr(self.request, "user", None)
-        return user if getattr(user, "is_authenticated", False) else None
-
 
 class PhotoPicker(forms.FileInput):
     """

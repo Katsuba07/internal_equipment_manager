@@ -50,12 +50,3 @@ class AdminRequiredMixin(RoleRequiredMixin):
 
     def has_role_permission(self) -> bool:
         return self.request.user.is_admin
-
-
-class FormRequestMixin:
-    """Pass the request into the form so it knows who is acting."""
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["request"] = self.request
-        return kwargs

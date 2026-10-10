@@ -250,12 +250,6 @@ class Product(NamedCatalog):
     def __str__(self) -> str:
         return f"{self.code} {self.revision}".strip() if self.revision else self.code
 
-    @property
-    def display_name(self) -> str:
-        """Code plus revision, with the description trailing. For headings."""
-        head = str(self)
-        return f"{head} — {self.name}" if self.name else head
-
     def save(self, *args, user=None, **kwargs):
         # ``user`` is who flipped "In production", for the assets' status history.
         was_running = None
@@ -368,17 +362,6 @@ class Attachment(TimeStampedModel):
             size /= 1024
         return f"{size:.1f} GB"
 
-    @property
-    def is_image(self) -> bool:
-        return os.path.splitext(self.file.name)[1].lower() in {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".webp",
-            ".bmp",
-        }
-
 
 class AttachmentMixin(models.Model):
     """Adds the attachment relation, and photo helpers, to any model."""
@@ -406,11 +389,6 @@ class AttachmentMixin(models.Model):
     def nameplate_photos(self) -> list:
         """Photos of the nameplate/marking/tag — kept apart from the general Photos."""
         return self._photos_of(AttachmentKind.NAMEPLATE)
-
-    @property
-    def main_nameplate_photo(self):
-        photos = self.nameplate_photos
-        return photos[0] if photos else None
 
 
 class DueScheduleMixin(models.Model):

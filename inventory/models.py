@@ -127,10 +127,6 @@ class InventoryItem(AttachmentMixin, TimeStampedModel):
         return "cell-warn" if self.is_below_minimum else ""
 
     @property
-    def stock_value(self):
-        return (self.unit_price or 0) * self.quantity_on_hand
-
-    @property
     def quantity_display(self) -> str:
         return f"{self.quantity_on_hand.normalize():f} {self.unit}"
 

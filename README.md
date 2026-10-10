@@ -86,7 +86,6 @@ core/            Users, roles, shared catalogs, attachments, dashboard
   ├─ models.py         User, Location, Category, Supplier, Attachment, DueScheduleMixin
   ├─ tables.py         BaseTable, BadgeColumn — reused by every module
   └─ management/commands/
-       ├─ seed_demo.py    PCBA test-engineering demo data
        └─ backup_db.py    Self-verifying backup
 equipment/       Asset records, status and status history
 systems/         Products page: processes per product, roles, equipment sets
@@ -120,21 +119,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 copy .env.example .env          # then generate EMA_SECRET_KEY, set EMA_DEBUG=True
 .\.venv\Scripts\python.exe manage.py migrate
-.\.venv\Scripts\python.exe manage.py seed_demo
+.\.venv\Scripts\python.exe manage.py createsuperuser
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
 Open http://localhost:8000
-
-### Demo accounts (password `TestEng@2026`)
-
-| Username | Role | Department |
-|---|---|---|
-| `admin` | Administrator | Test Engineering |
-| `manager` | Manager | Test Engineering |
-| `te.khanh` | Technician | Test Engineering |
-| `te.duy` | Technician | Maintenance |
-| `qa.linh` | Viewer | Quality Assurance |
 
 ### How products and their equipment are modelled
 
@@ -161,13 +150,6 @@ The products page (`/products/`) groups products by customer, shows only those i
 production unless asked, and lists each process's sets with the equipment in use.
 Clicking a set, process or product opens a panel on the right (htmx); every panel
 also has its own URL (`?set=`, `?process=`, `?product=`).
-
-The demo set is modelled on a real TE inventory: ICT and FCT fixtures and
-stations, mobile test carts, bench power supplies, DMMs, scopes, a function
-generator, an electronic load, flash and JTAG programmers, soldering and rework
-stations, a hipot tester, an ESD tester, a thermal chamber and a torque
-screwdriver — plus the pogo pins, probes, relays and cables that keep them
-running. Delete or re-password these accounts before real use.
 
 ### Tests
 

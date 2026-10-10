@@ -220,10 +220,6 @@ class GoldenSummary:
     def has_warning(self) -> bool:
         return bool(self.warnings)
 
-    @property
-    def first_warning(self) -> str:
-        return self.warnings[0] if self.warnings else ""
-
 
 class ProcessRole(TimeStampedModel):
     """
@@ -617,11 +613,6 @@ class ProductDocument(TimeStampedModel):
         from .doc_sync import download_url
 
         return download_url(self)
-
-    @property
-    def viewable(self) -> bool:
-        """Opens in the browser rather than downloading."""
-        return self.extension in {"pdf", "png", "jpg", "jpeg", "txt"}
 
     @property
     def size_display(self) -> str:

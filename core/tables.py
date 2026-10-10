@@ -37,10 +37,3 @@ class BadgeColumn(tables.Column):
         display = getattr(record, f"get_{bound_column.name}_display", None)
         label = display() if callable(display) else value
         return format_html('<span class="badge {}">{}</span>', css, label)
-
-
-class MonoColumn(tables.Column):
-    """Monospaced column for identifiers — asset IDs, part numbers, serials."""
-
-    def render(self, value):
-        return format_html('<span class="mono">{}</span>', value)
