@@ -154,6 +154,21 @@ nssm stop    EquipmentManager
 nssm remove  EquipmentManager confirm
 ```
 
+### Updating to a new version
+
+New versions are written on the development PC and pushed to GitHub; the server
+only ever fetches them. On the server, run:
+
+```powershell
+.\scripts\update.ps1
+```
+
+It fetches the code, installs anything new it needs, updates the database and
+starts the system again (as a service, or in the window if it runs that way).
+People are cut off for about a minute. The `data` folder and `.env` are not
+part of the code and are never touched. Git must be installed on the server
+(https://git-scm.com/download/win).
+
 ---
 
 ## 5. Backups

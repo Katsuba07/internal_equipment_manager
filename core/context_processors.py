@@ -4,7 +4,7 @@ from django.conf import settings
 
 APP_NAME = "Equipment Manager"
 APP_SHORT_NAME = "EMA"
-APP_VERSION = "0.9.7"
+APP_VERSION = "0.9.8"
 
 # Files whose changes must reach the browser immediately.
 _VERSIONED_ASSETS = ("static/css/app.css", "static/js/app.js")

@@ -5,7 +5,7 @@ records, **products by customer with each process's equipment sets**, maintenanc
 incidents, spares, and calibration of measuring equipment — with the history an
 audit will ask for.
 
-**Current release: 0.9.7.** See the [roadmap](#roadmap) below.
+**Current release: 0.9.8.** See the [roadmap](#roadmap) below.
 
 > Installing or running it? Read **[OPERATIONS-GUIDE.md](OPERATIONS-GUIDE.md)** —
 > written for the person operating the system, no programming assumed.
@@ -245,6 +245,7 @@ enforcement against direct URL access**.
 | 0.9.5 | Review: every page checked for each role on a copy of the real data (no errors); a test posts to every URL as a viewer and confirms nothing changes; the admin site no longer asks for a missing icon; on-screen hints that repeated each other or the obvious are gone (and one that still said to move assets into production by hand); unused styles, empty placeholder files and outdated code comments removed | Done |
 | 0.9.6 | New fields found missing against a real asset-transfer spreadsheet: nameplate/marking photo kept in its own slot (separate from general Photos, so it is obvious which assets still need one), country of origin, condition when received (new/used), voltage, power (W) and size (L × W × H) | Done |
 | 0.9.7 | A stock movement can be corrected after the fact — edited or deleted, with every later balance on that part recalculated — and its reason picked from a list of past reasons for that kind of part (typing a new one adds it for next time); the equipment export (.xlsx) carries each asset's photo; the Equipment and Spare parts lists filter as you type; a list row still opens the quick-look panel, but its ID/code always opens the full page; a new process's starting roles are picked from a dropdown instead of typed codes | Done |
+| 0.9.8 | Maintenance plans and a maintenance log on each asset, with a warning when an asset overdue for maintenance is fitted to a line in production; the dashboard shows calibration and maintenance due dates as a month calendar or a full list; golden samples (OK/NG) tracked per process of each product, with the required quantity and a warning before they expire; the asset key is now the ZT Code (e.g. 70-000148) with an optional Equipment No (e.g. DMM-001) beside it, and the unused technical and purchasing fields are gone from the form, import and export; each asset prints a label with a QR code straight to the Zebra label printer; `scripts/update.ps1` updates the server from GitHub | Done |
 | 0.8 | Maintenance log screens and calendar view | |
 | 0.8 | Incident reports and repair jobs, permission-checked attachments | |
 | 0.9 | Calibration screens, certificate attachments, QR labels, phone-friendly logging | |
