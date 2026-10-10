@@ -6,8 +6,6 @@ a management command when a bulk load is needed.
 """
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 from django.db import transaction
@@ -17,7 +15,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from PIL import Image as PILImage
 
-from core.models import Category, Location, Supplier
+from core.models import Category, Location
 
 from .models import Equipment, EquipmentStatus
 
@@ -26,7 +24,7 @@ PHOTO_CELL_PX = 64
 
 # Spreadsheet column → model field. The first three are required.
 COLUMNS = [
-    ("Equipment ID", "code", True),
+    ("ZT Code", "code", True),
     ("Name", "name", True),
     ("Category code", "category", True),
     ("Location code", "location", False),
@@ -34,21 +32,16 @@ COLUMNS = [
     ("Model", "model_number", False),
     ("Serial number", "serial_number", False),
     ("Year", "year_made", False),
-    ("Firmware version", "firmware_version", False),
     ("Status", "status", False),
-    ("Purchase date", "purchase_date", False),
-    ("Purchase cost (USD)", "purchase_cost", False),
-    ("In service since", "commissioned_date", False),
-    ("Warranty until", "warranty_until", False),
-    ("Supplier code", "supplier", False),
     ("Needs calibration (x)", "is_measuring_device", False),
     ("Specifications", "specifications", False),
     ("Notes", "notes", False),
     ("Asset No.", "asset_no", False),
+    ("Equipment No", "equipment_no", False),
 ]
 
-# Older templates called the first column "Asset ID"; they still load.
-HEADER_ALIASES = {"asset id": "equipment id"}
+# Older templates called the first column "Asset ID" or "Equipment ID"; they still load.
+HEADER_ALIASES = {"asset id": "zt code", "equipment id": "zt code"}
 
 HEADERS = [label for label, _, _ in COLUMNS]
 
@@ -79,35 +72,6 @@ def _clean(value):
     if isinstance(value, str):
         return value.strip()
     return value
-
-
-def _parse_date(value, label: str, row_number: int, errors: list[str]):
-    value = _clean(value)
-    if value in ("", None):
-        return None
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %b %Y", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(str(value), fmt).date()
-        except ValueError:
-            continue
-    errors.append(f"Row {row_number}: '{label}' is not a valid date (use yyyy-mm-dd).")
-    return None
-
-
-def _parse_decimal(value, label: str, row_number: int, errors: list[str]):
-    value = _clean(value)
-    if value in ("", None):
-        return None
-    try:
-        text = str(value).replace(",", "").replace(" ", "").replace("$", "")
-        return Decimal(text).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError):
-        errors.append(f"Row {row_number}: '{label}' is not a valid number.")
-        return None
 
 
 def _parse_int(value, label: str, row_number: int, errors: list[str]):
@@ -146,10 +110,8 @@ def build_template_workbook() -> Workbook:
 
     sheet.append([
         "FCT-FIX-014", "FCT fixture — BAF1950", "FIX-FCT", "TEST-FCT",
-        "In-house", "FCT-014", "SN-2024-0142", 2024,
-        "v2.1.0", "In production",
-        "2024-03-15", "8500.00", "2024-04-01", "2026-04-01",
-        "SUP-001", "", "128 test points, 4 UUT positions", "Primary fixture for line 2",
+        "In-house", "FCT-014", "SN-2024-0142", 2024, "In production",
+        "", "128 test points, 4 UUT positions", "Primary fixture for line 2",
     ])
 
     guide = workbook.create_sheet("Reference")
@@ -159,7 +121,6 @@ def build_template_workbook() -> Workbook:
     guide["A1"].font = Font(bold=True)
     guide["B1"].font = Font(bold=True)
     guide.append(["Red header columns", "Required — must be filled in"])
-    guide.append(["Date format", "yyyy-mm-dd, e.g. 2026-03-15"])
     guide.append(["Needs calibration", "Put an x for instruments that require calibration"])
     guide.append([])
     guide.append(["Valid status values", ""])
@@ -169,7 +130,6 @@ def build_template_workbook() -> Workbook:
     for title, queryset in (
         ("Category codes", Category.objects.active()),
         ("Location codes", Location.objects.active()),
-        ("Supplier codes", Supplier.objects.active()),
     ):
         guide.append([])
         guide.append([title, ""])
@@ -222,25 +182,25 @@ def import_equipment_from_xlsx(file_obj, user, update_existing: bool = False) ->
     # Load catalogs up front instead of querying per row.
     categories = {c.code.upper(): c for c in Category.objects.all()}
     locations = {loc.code.upper(): loc for loc in Location.objects.all()}
-    suppliers = {s.code.upper(): s for s in Supplier.objects.all()}
 
     pending_new: list[Equipment] = []
     pending_update: list[Equipment] = []
     seen_codes: set[str] = set()
     seen_asset_nos: set[str] = set()
+    seen_equipment_nos: set[str] = set()
 
     for row_number, row in enumerate(rows, start=2):
         if row is None or all(_clean(value) in ("", None) for value in row):
             continue
 
-        code = str(_clean(cell(row, "Equipment ID"))).upper()
+        code = str(_clean(cell(row, "ZT Code"))).upper()
         name = str(_clean(cell(row, "Name")))
         if not code or not name:
-            result.errors.append(f"Row {row_number}: Equipment ID and Name are both required.")
+            result.errors.append(f"Row {row_number}: ZT Code and Name are both required.")
             continue
 
         if code in seen_codes:
-            result.errors.append(f"Row {row_number}: Equipment ID '{code}' appears twice in this file.")
+            result.errors.append(f"Row {row_number}: ZT Code '{code}' appears twice in this file.")
             continue
         seen_codes.add(code)
 
@@ -253,12 +213,6 @@ def import_equipment_from_xlsx(file_obj, user, update_existing: bool = False) ->
             continue
         if location_code and not location:
             result.errors.append(f"Row {row_number}: no location with code '{location_code}'.")
-            continue
-
-        supplier_code = str(_clean(cell(row, "Supplier code"))).upper()
-        supplier = suppliers.get(supplier_code) if supplier_code else None
-        if supplier_code and not supplier:
-            result.errors.append(f"Row {row_number}: no supplier with code '{supplier_code}'.")
             continue
 
         status_text = str(_clean(cell(row, "Status"))).lower()
@@ -284,30 +238,32 @@ def import_equipment_from_xlsx(file_obj, user, update_existing: bool = False) ->
             "name": name,
             "category": category,
             "location": location,
-            "supplier": supplier,
             "status": status,
             "manufacturer": str(_clean(cell(row, "Manufacturer"))),
             "model_number": str(_clean(cell(row, "Model"))),
             "serial_number": str(_clean(cell(row, "Serial number"))),
-            "firmware_version": str(_clean(cell(row, "Firmware version"))),
             "year_made": _parse_int(cell(row, "Year"), "Year", row_number, result.errors),
-            "purchase_date": _parse_date(
-                cell(row, "Purchase date"), "Purchase date", row_number, result.errors
-            ),
-            "purchase_cost": _parse_decimal(
-                cell(row, "Purchase cost (USD)"), "Purchase cost", row_number, result.errors
-            ),
-            "commissioned_date": _parse_date(
-                cell(row, "In service since"), "In service since", row_number, result.errors
-            ),
-            "warranty_until": _parse_date(
-                cell(row, "Warranty until"), "Warranty until", row_number, result.errors
-            ),
             "is_measuring_device": _is_truthy(cell(row, "Needs calibration (x)")),
             "specifications": str(_clean(cell(row, "Specifications"))),
             "notes": str(_clean(cell(row, "Notes"))),
             "asset_no": str(_clean(cell(row, "Asset No."))).upper(),
+            "equipment_no": str(_clean(cell(row, "Equipment No"))).upper(),
         }
+
+        equipment_no = values["equipment_no"]
+        if equipment_no:
+            if equipment_no in seen_equipment_nos:
+                result.errors.append(
+                    f"Row {row_number}: Equipment No '{equipment_no}' appears twice in this file."
+                )
+                continue
+            seen_equipment_nos.add(equipment_no)
+            holder = Equipment.objects.filter(equipment_no=equipment_no).exclude(code=code).first()
+            if holder:
+                result.errors.append(
+                    f"Row {row_number}: Equipment No '{equipment_no}' is already on {holder.code}."
+                )
+                continue
 
         asset_no = values["asset_no"]
         if asset_no:
@@ -378,11 +334,9 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill("solid", fgColor="1F6FEB")
     headers = [
-        "Photo", "Equipment ID", "Asset No.", "Name", "Category", "Location", "Status",
+        "Photo", "ZT Code", "Equipment No", "Asset No.", "Name", "Category", "Location", "Status",
         "Manufacturer", "Model", "Serial number", "Year",
-        "Used for (products)", "Firmware version",
-        "Purchase date", "Purchase cost (USD)", "In service since", "Warranty until",
-        "Supplier", "Needs calibration", "Specifications", "Notes",
+        "Used for (products)", "Needs calibration", "Specifications", "Notes",
     ]
     for index, label in enumerate(headers, start=1):
         cell = sheet.cell(row=1, column=index, value=label)
@@ -401,6 +355,7 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
         sheet.append([
             None,  # the photo is dropped in as a floating image, not a cell value
             item.code,
+            item.equipment_no,
             item.asset_no,
             item.name,
             item.category.name if item.category else "",
@@ -411,12 +366,6 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
             item.serial_number,
             item.year_made,
             ", ".join(item.product_codes),
-            item.firmware_version,
-            item.purchase_date,
-            item.purchase_cost,
-            item.commissioned_date,
-            item.warranty_until,
-            item.supplier.name if item.supplier else "",
             "x" if item.is_measuring_device else "",
             item.specifications,
             item.notes,
@@ -424,14 +373,5 @@ def export_equipment_to_xlsx(queryset) -> Workbook:
         _embed_photo(sheet, f"A{row_index}", item.main_photo)
         sheet.row_dimensions[row_index].height = PHOTO_CELL_PX * 0.75  # px -> points
         row_index += 1
-
-    date_columns = (14, 16, 17)  # purchase date, in service since, warranty until
-    for column in date_columns:
-        for row in sheet.iter_rows(min_row=2, min_col=column, max_col=column):
-            for cell in row:
-                cell.number_format = "YYYY-MM-DD"
-    for row in sheet.iter_rows(min_row=2, min_col=15, max_col=15):  # purchase cost
-        for cell in row:
-            cell.number_format = "#,##0.00"
 
     return workbook

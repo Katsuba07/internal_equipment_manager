@@ -63,7 +63,7 @@ class IdsAndPhotosTests(BaseFixtureMixin, TestCase):
         self.edit(asset_no="103220100359", serial_number="41415453WS")
         self.login(Role.VIEWER)
         body = self.client.get(reverse("equipment:list") + "?q=1032201003").content.decode()
-        for text in ("Equipment ID", "Asset No.", "S/N", "103220100359", "41415453WS", self.equipment.code):
+        for text in ("ZT Code", "Equipment No", "Asset No.", "S/N", "103220100359", "41415453WS", self.equipment.code):
             self.assertIn(text, body)
 
     def test_old_spreadsheets_with_asset_id_still_load(self):

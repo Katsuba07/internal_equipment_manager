@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}{{ equipment.code }} — {{ APP_NAME }}{% endblock %}
 
@@ -18,12 +17,11 @@
   <div>
     <div class="row-flex mb-1">
       <h1 class="mono">{{ equipment.code }}</h1>
+      {% if equipment.equipment_no %}<span class="mono fw-600 subtle">{{ equipment.equipment_no }}</span>{% endif %}
       <span class="badge {{ equipment.status_badge_class }}">{{ equipment.get_status_display }}</span>
+      {% if equipment.zt_code_pending %}<span class="badge badge-warning" title="This is a retired CTV2020… ID. Replace it with the asset's ZT Code (70-…) in Edit.">ZT Code pending</span>{% endif %}
       {% if equipment.is_measuring_device %}
       <span class="badge badge-outline"><i class="bi bi-rulers"></i> Calibrated</span>
-      {% endif %}
-      {% if equipment.is_under_warranty %}
-      <span class="badge badge-outline"><i class="bi bi-shield-check"></i> In warranty</span>
       {% endif %}
     </div>
     <div class="sub">
@@ -32,6 +30,9 @@
     </div>
   </div>
   <div class="actions no-print">
+    <a href="{% url 'equipment:label' equipment.pk %}" class="btn btn-default" target="_blank" rel="noopener">
+      <i class="bi bi-qr-code"></i> Print label
+    </a>
     {% if user.can_record %}
     <a href="{% url 'equipment:status_change' equipment.pk %}" class="btn btn-default"
        data-modal-form="{% url 'equipment:status_change' equipment.pk %}">
@@ -76,302 +77,310 @@
   {% endfor %}
 {% endif %}
 
-<div class="grid-2">
-  <div class="stack">
-    <div class="card">
-      <div class="card-head"><i class="bi bi-info-circle"></i> Details</div>
-      <div class="card-body">
-        <div class="defs">
-          <div>
-            <div class="k">Asset No.</div>
-            <div class="v mono {% if not equipment.asset_no %}empty{% endif %}">{{ equipment.asset_no|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Serial number</div>
-            <div class="v mono {% if not equipment.serial_number %}empty{% endif %}">{{ equipment.serial_number|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Category</div>
-            <div class="v">{{ equipment.category.name }}</div>
-          </div>
-          <div>
-            <div class="k">Location</div>
-            <div class="v {% if not equipment.location %}empty{% endif %}">{{ equipment.location.full_path|default:"Not set" }}</div>
-          </div>
-          <div>
-            <div class="k">Manufacturer</div>
-            <div class="v {% if not equipment.manufacturer %}empty{% endif %}">{{ equipment.manufacturer|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Model</div>
-            <div class="v {% if not equipment.model_number %}empty{% endif %}">{{ equipment.model_number|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Firmware</div>
-            <div class="v mono {% if not equipment.firmware_version %}empty{% endif %}">{{ equipment.firmware_version|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Country of origin</div>
-            <div class="v {% if not equipment.country_of_origin %}empty{% endif %}">{{ equipment.country_of_origin|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Condition when received</div>
-            <div class="v {% if not equipment.condition %}empty{% endif %}">{{ equipment.get_condition_display|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Voltage</div>
-            <div class="v {% if not equipment.voltage %}empty{% endif %}">{{ equipment.voltage|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Power</div>
-            <div class="v {% if not equipment.power_watt %}empty{% endif %}">{% if equipment.power_watt %}{{ equipment.power_watt }} W{% else %}—{% endif %}</div>
-          </div>
-          <div>
-            <div class="k">Size (L × W × H, mm)</div>
-            <div class="v {% if not equipment.dimensions %}empty{% endif %}">{{ equipment.dimensions|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Fitted in</div>
-            <div class="v {% if not usage.current_installation %}empty{% endif %}">
-              {% with inst=usage.current_installation %}
-              {% if inst and inst.test_set %}
-              <a href="{% url 'systems:products' %}?set={{ inst.test_set_id }}">{{ inst.test_set }}</a>
-              {% if inst.role %}<span class="subtle"> · {{ inst.role.name }}</span>{% endif %}
-              {% elif inst %}{{ inst.where }}{% else %}Not fitted anywhere{% endif %}
-              {% endwith %}
-            </div>
-          </div>
-          {% if equipment.specifications %}
-          <div class="wide">
-            <div class="k">Specifications</div>
-            <div class="v">{{ equipment.specifications|linebreaksbr }}</div>
-          </div>
-          {% endif %}
-          {% if equipment.notes %}
-          <div class="wide">
-            <div class="k">Notes</div>
-            <div class="v">{{ equipment.notes|linebreaksbr }}</div>
-          </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-head">
-        <i class="bi bi-nut"></i> Parts
-        <span class="badge badge-neutral">{{ equipment.parts.all|length }}</span>
-        <span class="spacer"></span>
-        {% if user.can_manage %}<a href="{% url 'equipment:update' equipment.pk %}#parts" class="small no-print">Edit parts</a>{% endif %}
-      </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Part</th><th class="text-end">Qty</th><th class="text-end">In stock</th><th>Note</th></tr></thead>
-          <tbody>
-            {% for line in equipment.parts.all %}
-            <tr>
-              <td><a class="mono fw-600" href="{{ line.item.get_absolute_url }}">{{ line.item.code }}</a> <span class="subtle">{{ line.item.name }}</span></td>
-              <td class="text-end nowrap">{{ line.quantity|floatformat:"-2" }} <span class="subtle small">{{ line.item.unit }}</span></td>
-              <td class="text-end {{ line.item.stock_cell_class }}">{{ line.item.quantity_on_hand|floatformat:"-2" }}</td>
-              <td class="subtle">{{ line.notes }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="4" class="cell-muted">No parts listed. Add them from Edit → Parts.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-head">
-        <i class="bi bi-box-arrow-up"></i> Parts issued to this asset
-        <span class="badge badge-neutral">{{ part_issues|length }}</span>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Date</th><th>Part</th><th class="text-end">Qty</th><th>Reason</th><th>By</th></tr></thead>
-          <tbody>
-            {% for move in part_issues %}
-            <tr>
-              <td class="nowrap">{{ move.occurred_at|date:"d M Y" }}</td>
-              <td><a class="mono fw-600" href="{{ move.item.get_absolute_url }}">{{ move.item.code }}</a> <span class="subtle">{{ move.item.name }}</span></td>
-              <td class="text-end nowrap">{{ move.quantity|floatformat:"-2" }} <span class="subtle small">{{ move.item.unit }}</span></td>
-              <td class="subtle">{{ move.reason }}</td>
-              <td class="subtle nowrap">{{ move.performed_by.get_short_name|default:"" }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="5" class="cell-muted">Nothing issued to this asset yet.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-head"><i class="bi bi-receipt"></i> Purchasing &amp; warranty</div>
-      <div class="card-body">
-        <div class="defs">
-          <div>
-            <div class="k">Supplier</div>
-            <div class="v {% if not equipment.supplier %}empty{% endif %}">{{ equipment.supplier.name|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Purchased</div>
-            <div class="v {% if not equipment.purchase_date %}empty{% endif %}">{{ equipment.purchase_date|date:"d M Y"|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Cost</div>
-            <div class="v {% if not equipment.purchase_cost %}empty{% endif %}">
-              {% if equipment.purchase_cost %}${{ equipment.purchase_cost|floatformat:2|intcomma }}{% else %}—{% endif %}
-            </div>
-          </div>
-          <div>
-            <div class="k">In service since</div>
-            <div class="v {% if not equipment.commissioned_date %}empty{% endif %}">{{ equipment.commissioned_date|date:"d M Y"|default:"—" }}</div>
-          </div>
-          <div>
-            <div class="k">Warranty until</div>
-            <div class="v {% if not equipment.warranty_until %}empty{% endif %}">
-              {% if equipment.warranty_until %}
-                {{ equipment.warranty_until|date:"d M Y" }}
-                {% if not equipment.is_under_warranty %}<span class="badge badge-muted">expired</span>{% endif %}
-              {% else %}—{% endif %}
-            </div>
-          </div>
-          <div>
-            <div class="k">Age</div>
-            <div class="v {% if not equipment.age_years %}empty{% endif %}">
-              {% if equipment.age_years %}{{ equipment.age_years }} years{% else %}—{% endif %}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {% if maintenance_plans or calibration_plans %}
-    <div class="card">
-      <div class="card-head"><i class="bi bi-calendar3"></i> Schedules</div>
-      <div class="rows">
-        {% for plan in calibration_plans %}
-        <div class="row-item">
-          <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
-          <div class="row-main">
-            <div class="row-title">{{ plan.name }}</div>
-            <div class="row-sub">
-              Calibration · every {{ plan.interval_months }} month{{ plan.interval_months|pluralize }}
-              {% if plan.provider %} · {{ plan.provider.name }}{% endif %}
-            </div>
-          </div>
-          <div class="row-side">
-            <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
-            <div class="subtle">{{ plan.next_due_at|date:"d M Y" }}</div>
-          </div>
-        </div>
-        {% endfor %}
-        {% for plan in maintenance_plans %}
-        <div class="row-item">
-          <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
-          <div class="row-main">
-            <div class="row-title">{{ plan.name }}</div>
-            <div class="row-sub">
-              {{ plan.get_kind_display }} · every {{ plan.interval_days }} days
-              {% if plan.assignee %} · {{ plan.assignee.get_full_name }}{% endif %}
-            </div>
-          </div>
-          <div class="row-side">
-            <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
-            <div class="subtle">{{ plan.next_due_at|date:"d M Y" }}</div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
-    <div class="card no-print">
-      <div class="card-head"><i class="bi bi-clipboard-data"></i> Lifecycle</div>
-      <div class="card-body">
-        <div class="counter-row">
-          {% with m=equipment.maintenance_records.count r=equipment.repair_records.count i=equipment.incidents.count c=equipment.calibration_records.count %}
-          <span><b>{{ m }}</b> maintenance</span>
-          <span><b>{{ r }}</b> repair{{ r|pluralize }}</span>
-          <span><b>{{ i }}</b> incident{{ i|pluralize }}</span>
-          <span><b>{{ c }}</b> calibration{{ c|pluralize }}</span>
-          {% endwith %}
-          {% if user.is_admin %}
-          <a class="spacer small" href="{% url 'admin:index' %}">Open in admin</a>
-          {% endif %}
-        </div>
-      </div>
+{% for plan in maintenance_plans %}
+  {% if plan.is_overdue %}
+  <div class="alert alert-danger no-print">
+    <i class="bi bi-exclamation-octagon"></i>
+    <div>
+      <strong>{{ plan.name }} overdue by {{ plan.days_until_due|stringformat:"d"|cut:"-" }} days.</strong>
+      {% if usage.current_installation %}This asset is still fitted in {{ usage.current_installation.where }} — it should be serviced before further use.{% else %}It should be serviced before further use.{% endif %}
     </div>
   </div>
+  {% endif %}
+{% endfor %}
 
-  {# --- Photos, then where it is used and how it got there --- #}
+<div class="grid-2">
+  <div class="stack">
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><i class="bi bi-info-circle"></i> Details</div>
+        <div class="card-body">
+          <div class="defs">
+            <div>
+              <div class="k">ZT Code</div>
+              <div class="v mono">{{ equipment.code }}</div>
+            </div>
+            <div>
+              <div class="k">Equipment No</div>
+              <div class="v mono {% if not equipment.equipment_no %}empty{% endif %}">{{ equipment.equipment_no|default:"—" }}</div>
+            </div>
+            <div>
+              <div class="k">Asset No.</div>
+              <div class="v mono {% if not equipment.asset_no %}empty{% endif %}">{{ equipment.asset_no|default:"—" }}</div>
+            </div>
+            <div>
+              <div class="k">Serial number</div>
+              <div class="v mono {% if not equipment.serial_number %}empty{% endif %}">{{ equipment.serial_number|default:"—" }}</div>
+            </div>
+            <div>
+              <div class="k">Category</div>
+              <div class="v">{{ equipment.category.name }}</div>
+            </div>
+            <div>
+              <div class="k">Location</div>
+              <div class="v {% if not equipment.location %}empty{% endif %}">{{ equipment.location.full_path|default:"Not set" }}</div>
+            </div>
+            <div>
+              <div class="k">Manufacturer</div>
+              <div class="v {% if not equipment.manufacturer %}empty{% endif %}">{{ equipment.manufacturer|default:"—" }}</div>
+            </div>
+            <div>
+              <div class="k">Model</div>
+              <div class="v {% if not equipment.model_number %}empty{% endif %}">{{ equipment.model_number|default:"—" }}</div>
+            </div>
+            {% if equipment.specifications %}
+            <div class="wide">
+              <div class="k">Specifications</div>
+              <div class="v">{{ equipment.specifications|linebreaksbr }}</div>
+            </div>
+            {% endif %}
+            {% if equipment.notes %}
+            <div class="wide">
+              <div class="k">Notes</div>
+              <div class="v">{{ equipment.notes|linebreaksbr }}</div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-head">
+          <i class="bi bi-nut"></i> Parts
+          <span class="badge badge-neutral">{{ equipment.parts.all|length }}</span>
+          <span class="spacer"></span>
+          {% if user.can_manage %}<a href="{% url 'equipment:update' equipment.pk %}#parts" class="small no-print">Edit parts</a>{% endif %}
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Part</th><th class="text-end">Qty</th><th class="text-end">In stock</th><th>Note</th></tr></thead>
+            <tbody>
+              {% for line in equipment.parts.all %}
+              <tr>
+                <td><a class="mono fw-600" href="{{ line.item.get_absolute_url }}">{{ line.item.code }}</a> <span class="subtle">{{ line.item.name }}</span></td>
+                <td class="text-end nowrap">{{ line.quantity|floatformat:"-2" }} <span class="subtle small">{{ line.item.unit }}</span></td>
+                <td class="text-end {{ line.item.stock_cell_class }}">{{ line.item.quantity_on_hand|floatformat:"-2" }}</td>
+                <td class="subtle">{{ line.notes }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="4" class="cell-muted">No parts listed. Add them from Edit → Parts.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <i class="bi bi-box-arrow-up"></i> Parts issued to this asset
+          <span class="badge badge-neutral">{{ part_issues|length }}</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Part</th><th class="text-end">Qty</th><th>Reason</th><th>By</th></tr></thead>
+            <tbody>
+              {% for move in part_issues %}
+              <tr>
+                <td class="nowrap">{{ move.occurred_at|date:"d M Y" }}</td>
+                <td><a class="mono fw-600" href="{{ move.item.get_absolute_url }}">{{ move.item.code }}</a> <span class="subtle">{{ move.item.name }}</span></td>
+                <td class="text-end nowrap">{{ move.quantity|floatformat:"-2" }} <span class="subtle small">{{ move.item.unit }}</span></td>
+                <td class="subtle">{{ move.reason }}</td>
+                <td class="subtle nowrap">{{ move.performed_by.get_short_name|default:"" }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="cell-muted">Nothing issued to this asset yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      {% if maintenance_plans or calibration_plans or user.can_manage %}
+      <div class="card">
+        <div class="card-head">
+          <i class="bi bi-calendar3"></i> Schedules
+          <span class="spacer no-print"></span>
+          {% if user.can_manage %}
+          <a href="{% url 'maintenance:plan_create' equipment.pk %}" class="btn btn-ghost btn-sm no-print"
+             data-modal-form="{% url 'maintenance:plan_create' equipment.pk %}"><i class="bi bi-plus-lg"></i> New plan</a>
+          {% endif %}
+        </div>
+        <div class="rows">
+          {% for plan in calibration_plans %}
+          <div class="row-item">
+            <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
+            <div class="row-main">
+              <div class="row-title">{{ plan.name }}</div>
+              <div class="row-sub">
+                Calibration · every {{ plan.interval_months }} month{{ plan.interval_months|pluralize }}
+                {% if plan.provider %} · {{ plan.provider.name }}{% endif %}
+              </div>
+            </div>
+            <div class="row-side">
+              <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
+              <div class="subtle">{{ plan.next_due_at|date:"d M Y" }}</div>
+            </div>
+          </div>
+          {% endfor %}
+          {% for plan in maintenance_plans %}
+          <div class="row-item">
+            <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
+            <div class="row-main">
+              <div class="row-title">{{ plan.name }}</div>
+              <div class="row-sub">
+                {{ plan.get_kind_display }} · every {{ plan.interval_days }} days
+                {% if plan.assignee %} · {{ plan.assignee.get_full_name }}{% endif %}
+              </div>
+            </div>
+            <div class="row-side">
+              <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
+              <div class="subtle">{{ plan.next_due_at|date:"d M Y" }}</div>
+            </div>
+            {% if user.can_record or user.can_manage %}
+            <div class="no-print" style="display:flex;gap:0.2rem">
+              {% if user.can_record %}
+              <a class="btn btn-ghost btn-icon btn-sm" title="Log done"
+                 href="{% url 'maintenance:record_create' equipment.pk %}?plan={{ plan.pk }}"
+                 data-modal-form="{% url 'maintenance:record_create' equipment.pk %}?plan={{ plan.pk }}"><i class="bi bi-check2-square"></i></a>
+              {% endif %}
+              {% if user.can_manage %}
+              <a class="btn btn-ghost btn-icon btn-sm" title="Edit plan"
+                 href="{% url 'maintenance:plan_edit' plan.pk %}"
+                 data-modal-form="{% url 'maintenance:plan_edit' plan.pk %}"><i class="bi bi-pencil"></i></a>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% empty %}
+          {% if not calibration_plans %}
+          <div class="empty"><i class="bi bi-calendar3"></i><div class="title">No schedules yet</div></div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card">
+        <div class="card-head">
+          <i class="bi bi-wrench"></i> Maintenance log
+          <span class="spacer no-print"></span>
+          {% if user.can_record %}
+          <a href="{% url 'maintenance:record_create' equipment.pk %}" class="btn btn-ghost btn-sm no-print"
+             data-modal-form="{% url 'maintenance:record_create' equipment.pk %}"><i class="bi bi-plus-lg"></i> Log maintenance</a>
+          {% endif %}
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Type</th><th>Result</th><th class="text-end">Downtime</th><th>By</th></tr></thead>
+            <tbody>
+              {% for record in maintenance_records %}
+              <tr>
+                <td class="nowrap"><a href="{{ record.get_absolute_url }}">{{ record.performed_at|date:"d M Y" }}</a></td>
+                <td>{{ record.get_kind_display }}</td>
+                <td><span class="badge {{ record.result_badge_class }}">{{ record.get_result_display }}</span></td>
+                <td class="text-end">{% if record.downtime_minutes %}{{ record.downtime_minutes }} min{% else %}—{% endif %}</td>
+                <td class="subtle nowrap">{{ record.performed_by.get_short_name|default:"" }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="cell-muted">No maintenance logged yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card no-print">
+        <div class="card-head"><i class="bi bi-clipboard-data"></i> Lifecycle</div>
+        <div class="card-body">
+          <div class="counter-row">
+            {% with m=equipment.maintenance_records.count r=equipment.repair_records.count i=equipment.incidents.count c=equipment.calibration_records.count %}
+            <span><b>{{ m }}</b> maintenance</span>
+            <span><b>{{ r }}</b> repair{{ r|pluralize }}</span>
+            <span><b>{{ i }}</b> incident{{ i|pluralize }}</span>
+            <span><b>{{ c }}</b> calibration{{ c|pluralize }}</span>
+            {% endwith %}
+            {% if user.is_admin %}
+            <a class="spacer small" href="{% url 'admin:index' %}">Open in admin</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if usage.history %}
+      <div class="card no-print">
+        <div class="card-head"><i class="bi bi-arrow-left-right"></i> Fitting history</div>
+        <div class="rows">
+          {% for installation in usage.history %}
+          <div class="row-item">
+            <span class="dot {% if installation.is_open %}dot-success{% else %}dot-neutral{% endif %}"></span>
+            <div class="row-main">
+              <div class="row-title">{% if installation.test_set %}<a href="{% url 'systems:products' %}?set={{ installation.test_set_id }}">{{ installation.where }}</a>{% else %}{{ installation.where }}{% endif %}{% if installation.role %} · {{ installation.role.name }}{% endif %}</div>
+              <div class="row-sub">
+                {{ installation.installed_at|date:"d M Y" }}
+                {% if installation.removed_at %} → {{ installation.removed_at|date:"d M Y" }}{% else %} → now{% endif %}
+                {% if installation.reason %} · {{ installation.reason }}{% endif %}
+              </div>
+            </div>
+            <div class="row-side">
+              {% if installation.installed_by %}{{ installation.installed_by.get_short_name }}{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card">
+        <div class="card-head">
+          <i class="bi bi-clock-history"></i> Status history
+          <span class="spacer sub">{{ equipment.status_history.count }} change{{ equipment.status_history.count|pluralize }}</span>
+        </div>
+        <div class="card-body">
+          {% if status_history %}
+          <ul class="timeline">
+            {% for change in status_history %}
+            <li class="tl-item">
+              <div class="tl-head">
+                {% if change.from_status %}
+                <span class="subtle small">{{ change.get_from_status_display }}</span>
+                <i class="bi bi-arrow-right subtle small"></i>
+                {% endif %}
+                <span class="badge {{ change.to_status_badge_class }}">{{ change.get_to_status_display }}</span>
+                <span class="tl-time">{{ change.created_at|date:"d M Y H:i" }}</span>
+              </div>
+              {% if change.reason %}<div class="tl-body">{{ change.reason }}</div>{% endif %}
+              {% if change.note %}<div class="tl-body subtle">{{ change.note|linebreaksbr }}</div>{% endif %}
+              {% if change.changed_by %}
+              <div class="tl-who"><i class="bi bi-person"></i> {{ change.changed_by.get_full_name }}</div>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <div class="empty">
+            <i class="bi bi-clock"></i>
+            <div class="title">No changes yet</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {# Photos stay visible regardless of tab — how people confirm it's the right asset. #}
   <div class="stack">
     {% url 'photo_upload' 'equipment' 'equipment' equipment.pk as upload_url %}
     {% include "core/_photos.html" with obj=equipment upload_url=upload_url %}
     {% url 'nameplate_upload' 'equipment' 'equipment' equipment.pk as nameplate_upload_url %}
     {% include "core/_nameplate.html" with obj=equipment upload_url=nameplate_upload_url %}
-    {% if usage.history %}
-    <div class="card no-print">
-      <div class="card-head"><i class="bi bi-arrow-left-right"></i> Fitting history</div>
-      <div class="rows">
-        {% for installation in usage.history %}
-        <div class="row-item">
-          <span class="dot {% if installation.is_open %}dot-success{% else %}dot-neutral{% endif %}"></span>
-          <div class="row-main">
-            <div class="row-title">{% if installation.test_set %}<a href="{% url 'systems:products' %}?set={{ installation.test_set_id }}">{{ installation.where }}</a>{% else %}{{ installation.where }}{% endif %}{% if installation.role %} · {{ installation.role.name }}{% endif %}</div>
-            <div class="row-sub">
-              {{ installation.installed_at|date:"d M Y" }}
-              {% if installation.removed_at %} → {{ installation.removed_at|date:"d M Y" }}{% else %} → now{% endif %}
-              {% if installation.reason %} · {{ installation.reason }}{% endif %}
-            </div>
-          </div>
-          <div class="row-side">
-            {% if installation.installed_by %}{{ installation.installed_by.get_short_name }}{% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
-
-  <div class="card">
-    <div class="card-head">
-      <i class="bi bi-clock-history"></i> Status history
-      <span class="spacer sub">{{ equipment.status_history.count }} change{{ equipment.status_history.count|pluralize }}</span>
-    </div>
-    <div class="card-body">
-      {% if status_history %}
-      <ul class="timeline">
-        {% for change in status_history %}
-        <li class="tl-item">
-          <div class="tl-head">
-            {% if change.from_status %}
-            <span class="subtle small">{{ change.get_from_status_display }}</span>
-            <i class="bi bi-arrow-right subtle small"></i>
-            {% endif %}
-            <span class="badge {{ change.to_status_badge_class }}">{{ change.get_to_status_display }}</span>
-            <span class="tl-time">{{ change.created_at|date:"d M Y H:i" }}</span>
-          </div>
-          {% if change.reason %}<div class="tl-body">{{ change.reason }}</div>{% endif %}
-          {% if change.note %}<div class="tl-body subtle">{{ change.note|linebreaksbr }}</div>{% endif %}
-          {% if change.changed_by %}
-          <div class="tl-who"><i class="bi bi-person"></i> {{ change.changed_by.get_full_name }}</div>
-          {% endif %}
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <div class="empty">
-        <i class="bi bi-clock"></i>
-        <div class="title">No changes yet</div>
-      </div>
-      {% endif %}
-    </div>
-  </div>
   </div>
 </div>
 {% endblock %}

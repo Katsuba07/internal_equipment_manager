@@ -72,14 +72,21 @@ class Equipment(AttachmentMixin, TimeStampedModel):
     """A single asset on the floor: tester, fixture, instrument, or cart."""
 
     code = models.CharField(
-        "Equipment ID",
+        "ZT Code",
         max_length=50,
         unique=True,
-        help_text="The internal equipment ID, printed on the QR label. Example: CTV20200077",
+        help_text="The key of the asset, encoded in the QR label. Example: 70-000148",
     )
-    # Three identifiers, each kept by a different part of the company: the
-    # internal equipment ID above, the finance asset number here, and the
-    # maker's serial number further down.
+    equipment_no = models.CharField(
+        "Equipment No",
+        max_length=30,
+        blank=True,
+        db_index=True,
+        help_text="Type and running number, easy to read on the floor. Example: DMM-001",
+    )
+    # Four identifiers: the ZT Code above is the key; the Equipment No says
+    # what the asset is; the finance asset number and the maker's serial
+    # number follow.
     asset_no = models.CharField(
         "Asset No.",
         max_length=40,
@@ -196,6 +203,11 @@ class Equipment(AttachmentMixin, TimeStampedModel):
             models.UniqueConstraint(
                 fields=["asset_no"], condition=~models.Q(asset_no=""), name="asset_no_unique_when_set",
             ),
+            models.UniqueConstraint(
+                fields=["equipment_no"], condition=~models.Q(equipment_no=""),
+                name="equipment_no_unique_when_set",
+                violation_error_message="Another asset already has this Equipment No.",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -213,6 +225,17 @@ class Equipment(AttachmentMixin, TimeStampedModel):
     @property
     def is_available(self) -> bool:
         return self.status not in UNAVAILABLE_STATUSES
+
+    @property
+    def zt_code_pending(self) -> bool:
+        """Still carrying a retired CTV2020… ID in place of its real ZT Code."""
+        return self.code.upper().startswith("CTV")
+
+    @property
+    def label_qr_url(self) -> str:
+        from urllib.parse import quote
+
+        return settings.EMA_LABEL_QR_URL.replace("{code}", quote(self.code, safe=""))
 
     @property
     def is_under_warranty(self) -> bool:

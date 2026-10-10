@@ -69,7 +69,8 @@ class EquipmentTable(BaseTable):
             "td__input": {"data-bulk": "", "aria-label": "Select"},
         },
     )
-    code = AssetColumn(verbose_name="Equipment ID", order_by=("code",))
+    code = AssetColumn(verbose_name="ZT Code", order_by=("code",))
+    equipment_no = SerialColumn(verbose_name="Equipment No", empty_values=(), order_by=("equipment_no",))
     asset_no = SerialColumn(verbose_name="Asset No.", empty_values=(), order_by=("asset_no",))
     serial_number = SerialColumn(verbose_name="S/N", empty_values=(), order_by=("serial_number",))
     category = tables.Column(verbose_name="Category", accessor="category__name")
@@ -87,7 +88,7 @@ class EquipmentTable(BaseTable):
         model = Equipment
         # Clicking a row opens the quick-look drawer (see app.js).
         row_attrs = {"data-preview-url": lambda record: reverse("equipment:preview", args=[record.pk])}
-        fields = ("code", "asset_no", "serial_number", "category", "plant", "location", "products", "status", "is_measuring_device")
+        fields = ("code", "equipment_no", "asset_no", "serial_number", "category", "plant", "location", "products", "status", "is_measuring_device")
         sequence = ("select", "...")
         order_by = "code"
 

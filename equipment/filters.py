@@ -12,7 +12,7 @@ from .models import Equipment, EquipmentStatus
 SELECT_ATTRS = {"class": "form-select"}
 SEARCH_ATTRS = {
     "class": "search-input",
-    "placeholder": "Search equipment ID, asset no., S/N, name, model...",
+    "placeholder": "Search ZT code, equipment no., asset no., S/N, name...",
     "autocomplete": "off",
     # Live results while typing, without a full page reload — see #results
     # in equipment_list.html.
@@ -90,6 +90,7 @@ class EquipmentFilter(django_filters.FilterSet):
             return queryset
         return queryset.filter(
             Q(code__icontains=value)
+            | Q(equipment_no__icontains=value)
             | Q(asset_no__icontains=value)
             | Q(name__icontains=value)
             | Q(serial_number__icontains=value)

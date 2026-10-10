@@ -3,8 +3,6 @@
 import io
 import shutil
 import tempfile
-from datetime import date
-from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -12,7 +10,7 @@ from django.urls import reverse
 from openpyxl import Workbook
 from PIL import Image as PILImage
 
-from core.models import Category, Location, Role, Supplier, User
+from core.models import Category, Location, Role, User
 from core.photos import save_photo
 from equipment.models import Equipment, EquipmentStatus
 from equipment.services import HEADERS, export_equipment_to_xlsx, import_equipment_from_xlsx
@@ -103,15 +101,12 @@ class ExcelImportTests(TestCase):
         )
         Category.objects.create(code="FIX-FCT", name="FCT fixture")
         Location.objects.create(code="FCT-RM", name="FCT Room")
-        Supplier.objects.create(code="SUP-004", name="Fixture House Co., Ltd")
 
     def test_import_creates_equipment(self):
         file = make_workbook([
             ["FCT-FIX-014", "FCT fixture — BAF1950", "FIX-FCT", "FCT-RM",
-             "Fixture House", "FCT-014", "SN-2024-0142", 2024,
-             "v2.1.0", "In production",
-             "2024-03-15", "8500.00", "2024-04-01", "2026-04-01",
-             "SUP-004", "", "128 test points", "Primary fixture line 2"],
+             "Fixture House", "FCT-014", "SN-2024-0142", 2024, "In production",
+             "", "128 test points", "Primary fixture line 2"],
         ])
         result = import_equipment_from_xlsx(file, self.user)
 
@@ -123,10 +118,8 @@ class ExcelImportTests(TestCase):
         # "In production" in a spreadsheet is not taken on trust: only a
         # fitting to a running product makes an asset In production.
         self.assertEqual(asset.status, EquipmentStatus.AVAILABLE)
-        self.assertEqual(asset.firmware_version, "v2.1.0")
-        self.assertEqual(asset.purchase_date.isoformat(), "2024-03-15")
-        self.assertEqual(str(asset.purchase_cost), "8500.00")
-        self.assertEqual(asset.supplier.code, "SUP-004")
+        self.assertEqual(asset.manufacturer, "Fixture House")
+        self.assertEqual(asset.specifications, "128 test points")
 
     def test_lowercase_code_is_normalised_to_uppercase(self):
         file = make_workbook([["fct-fix-009", "FCT fixture", "FIX-FCT", "FCT-RM"] + BLANKS])
@@ -202,12 +195,12 @@ class ExcelImportTests(TestCase):
         self.assertTrue(result.has_errors)
         self.assertIn("Missing required columns", result.errors[0])
 
-    def test_invalid_date_is_reported(self):
+    def test_invalid_year_is_reported(self):
         row = ["FCT-FIX-001", "Fixture", "FIX-FCT", "FCT-RM"] + BLANKS
-        row[HEADERS.index("Purchase date")] = "next tuesday"
+        row[HEADERS.index("Year")] = "last year"
         result = import_equipment_from_xlsx(make_workbook([row]), self.user)
         self.assertTrue(result.has_errors)
-        self.assertIn("Purchase date", result.errors[0])
+        self.assertIn("Year", result.errors[0])
 
     def test_empty_rows_are_ignored(self):
         file = make_workbook([
@@ -238,7 +231,6 @@ class EquipmentFormTests(TestCase):
                 "category": self.category.pk,
                 "location": self.location.pk,
                 "year_made": "",
-                "purchase_cost": "",
                 "parts-TOTAL_FORMS": "0",
                 "parts-INITIAL_FORMS": "0",
             },
@@ -247,38 +239,6 @@ class EquipmentFormTests(TestCase):
         asset = Equipment.objects.get(code="ICT-FIX-007")  # normalised to upper case
         self.assertEqual(asset.status_history.count(), 1)
         self.assertEqual(asset.status_history.first().reason, "Asset record created")
-
-    def test_the_new_asset_fields_are_saved(self):
-        self.client.login(username="manager", password=PASSWORD)
-        self.client.post(
-            reverse("equipment:create"),
-            {
-                "code": "ICT-FIX-020", "name": "Potting machine", "category": self.category.pk,
-                "country_of_origin": "China", "condition": "USED",
-                "voltage": "AC220V", "power_watt": "1800", "dimensions": "105 x 65 x 160",
-                "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
-            },
-        )
-        asset = Equipment.objects.get(code="ICT-FIX-020")
-        self.assertEqual(asset.country_of_origin, "China")
-        self.assertEqual(asset.condition, "USED")
-        self.assertEqual(asset.voltage, "AC220V")
-        self.assertEqual(asset.power_watt, 1800)
-        self.assertEqual(asset.dimensions, "105 x 65 x 160")
-
-    def test_commissioned_date_before_purchase_date_is_rejected(self):
-        from equipment.forms import EquipmentForm
-
-        form = EquipmentForm(data={
-            "code": "ICT-FIX-001",
-            "name": "Fixture",
-            "category": self.category.pk,
-            "location": self.location.pk,
-            "purchase_date": "2024-05-01",
-            "commissioned_date": "2024-01-01",
-        })
-        self.assertFalse(form.is_valid())
-        self.assertIn("commissioned_date", form.errors)
 
 
 @override_settings(MEDIA_ROOT=EXPORT_TEMP_MEDIA)
@@ -304,7 +264,8 @@ class ExportWithPhotosTests(TestCase):
         workbook = export_equipment_to_xlsx(Equipment.objects.order_by("code"))
         sheet = workbook.active
         self.assertEqual(sheet.cell(row=1, column=1).value, "Photo")
-        self.assertEqual(sheet.cell(row=1, column=2).value, "Equipment ID")
+        self.assertEqual(sheet.cell(row=1, column=2).value, "ZT Code")
+        self.assertEqual(sheet.cell(row=1, column=3).value, "Equipment No")
         self.assertEqual(len(sheet._images), 1)
         self.assertEqual(sheet._images[0].anchor, "A2")  # row 2 == FCT-STN-001
 
@@ -313,21 +274,111 @@ class ExportWithPhotosTests(TestCase):
         sheet = workbook.active
         self.assertEqual(len(sheet._images), 0)
 
-    def test_date_and_currency_columns_are_formatted_correctly(self):
-        self.with_photo.purchase_date = date(2024, 1, 15)
-        self.with_photo.purchase_cost = Decimal("1234.50")
-        self.with_photo.commissioned_date = date(2024, 2, 1)
-        self.with_photo.warranty_until = date(2026, 2, 1)
-        self.with_photo.save()
-
+    def test_export_leaves_out_the_retired_columns(self):
         workbook = export_equipment_to_xlsx(Equipment.objects.filter(pk=self.with_photo.pk))
-        sheet = workbook.active
-        for column, label, fmt in [
-            (14, "Purchase date", "YYYY-MM-DD"),
-            (15, "Purchase cost (USD)", "#,##0.00"),
-            (16, "In service since", "YYYY-MM-DD"),
-            (17, "Warranty until", "YYYY-MM-DD"),
-        ]:
-            with self.subTest(column=label):
-                self.assertEqual(sheet.cell(row=1, column=column).value, label)
-                self.assertEqual(sheet.cell(row=2, column=column).number_format, fmt)
+        headers = [cell.value for cell in workbook.active[1]]
+        for gone in ("Firmware version", "Purchase date", "Purchase cost (USD)", "Warranty until", "Supplier"):
+            with self.subTest(column=gone):
+                self.assertNotIn(gone, headers)
+        self.assertEqual(headers[-3:], ["Needs calibration", "Specifications", "Notes"])
+
+
+class ZtCodeAndLabelTests(TestCase):
+    """ZT Code is the key, Equipment No sits beside it, and the label carries both."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username="viewer", password=PASSWORD, full_name="Linh Vo", role=Role.VIEWER
+        )
+        User.objects.create_user(
+            username="tech", password=PASSWORD, full_name="Minh Tran", role=Role.TECHNICIAN
+        )
+        category = Category.objects.create(code="DMM", name="Digital multimeter")
+        cls.dmm = Equipment.objects.create(
+            code="70-000148", equipment_no="DMM-001", name="KEYSIGHT 34461A",
+            category=category, serial_number="MY57224741",
+        )
+        cls.old = Equipment.objects.create(code="CTV20200077", name="Old style", category=category)
+
+    def setUp(self):
+        self.client.login(username="viewer", password=PASSWORD)
+
+    def test_label_shows_the_four_lines_and_the_qr_link(self):
+        response = self.client.get(reverse("equipment:label", args=[self.dmm.pk]))
+        for text in ("COMPUTIME VIETNAM", "DMM-001", "KEYSIGHT 34461A", "70-000148", "MY57224741", "<svg"):
+            self.assertContains(response, text)
+        self.assertEqual(
+            self.dmm.label_qr_url,
+            "https://computime.datafill.com/AssetManagement_VN?Param=70-000148&Task=AssetNo",
+        )
+
+    def test_zebra_label_holds_one_copy_per_label_across_the_roll(self):
+        from equipment.labels import LabelSize, build_zpl
+
+        zpl = build_zpl(self.dmm, LabelSize(w=45, h=25, cols=2))
+        self.assertTrue(zpl.startswith("^XA") and zpl.rstrip().endswith("^XZ"))
+        self.assertIn("^PW1063", zpl)              # 90 mm across at 300 dpi
+        self.assertEqual(zpl.count("^GFA"), 2)      # the QR code, drawn as a graphic
+        for text in ("COMPUTIME VIETNAM", "DMM-001", "KEYSIGHT 34461A", "MY57224741"):
+            self.assertEqual(zpl.count(text), 2, text)
+
+    def test_zebra_label_cuts_a_long_name_and_escapes_printer_commands(self):
+        from equipment.labels import LabelSize, build_zpl
+
+        self.dmm.name = "A^B " + "very long name " * 10
+        zpl = build_zpl(self.dmm, LabelSize(w=45, h=25))
+        self.assertIn("A\\5EB", zpl)
+        self.assertNotIn("A^B", zpl)
+        self.assertNotIn("very long name very long name very long name", zpl)
+
+    def test_zebra_label_text_size_can_be_chosen(self):
+        from equipment.labels import LabelSize, build_zpl
+
+        automatic = build_zpl(self.dmm, LabelSize.from_values({"w": "45", "h": "25", "font": "0"}))
+        small = build_zpl(self.dmm, LabelSize.from_values({"w": "45", "h": "25", "font": "2"}))
+        self.assertIn("^A0N,29,29^FDEQ No:", automatic)
+        self.assertIn("^A0N,24,24^FDEQ No:", small)     # 2 mm at 300 dpi
+
+    def test_print_label_sends_the_posted_size_to_the_printer(self):
+        from unittest import mock
+
+        self.client.login(username="tech", password=PASSWORD)
+        with mock.patch("equipment.views.send_to_printer") as send:
+            response = self.client.post(
+                reverse("equipment:label_print", args=[self.dmm.pk]),
+                {"w": "50", "h": "25", "cols": "1", "gap": "0", "dx": "nonsense"},
+            )
+        self.assertEqual(response.json()["ok"], True)
+        self.assertIn("^PW591", send.call_args.args[0])   # one 50 mm label
+
+    def test_print_label_reports_a_printer_that_cannot_be_reached(self):
+        from unittest import mock
+
+        from equipment.labels import LabelPrintError
+
+        self.client.login(username="tech", password=PASSWORD)
+        with mock.patch("equipment.views.send_to_printer", side_effect=LabelPrintError("Printer is off.")):
+            response = self.client.post(reverse("equipment:label_print", args=[self.dmm.pk]))
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["message"], "Printer is off.")
+
+    def test_search_finds_an_asset_by_its_equipment_no(self):
+        body = self.client.get(reverse("equipment:list") + "?q=dmm-001").content.decode()
+        self.assertIn("70-000148", body)
+        self.assertNotIn("CTV20200077", body)
+
+    def test_two_assets_cannot_share_an_equipment_no_but_blank_is_fine(self):
+        from django.core.exceptions import ValidationError
+
+        clash = Equipment(code="70-000149", equipment_no="DMM-001", name="x", category=self.dmm.category)
+        with self.assertRaises(ValidationError):
+            clash.full_clean()
+        Equipment.objects.create(code="70-000150", name="No number yet", category=self.dmm.category)
+        self.assertEqual(Equipment.objects.filter(equipment_no="").count(), 2)
+
+    def test_a_retired_ctv_id_is_flagged_as_pending(self):
+        self.assertTrue(self.old.zt_code_pending)
+        self.assertFalse(self.dmm.zt_code_pending)
+        self.assertContains(self.client.get(self.old.get_absolute_url()), "ZT Code pending")
+        self.assertNotContains(self.client.get(self.dmm.get_absolute_url()), "ZT Code pending")

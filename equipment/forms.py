@@ -5,7 +5,7 @@ from datetime import timedelta
 from django import forms
 
 from core.forms import DateInput, PhotosField, RequestFormMixin, offer_photo_removal, photos_to_remove_field
-from core.models import Category, Location, Supplier
+from core.models import Category, Location
 
 from .models import Equipment, EquipmentStatus
 
@@ -40,24 +40,17 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
     class Meta:
         model = Equipment
         fields = [
-            "code", "asset_no", "serial_number", "name", "category", "plant", "location",
-            "manufacturer", "model_number", "year_made", "country_of_origin", "condition",
-            "firmware_version", "specifications", "voltage", "power_watt", "dimensions",
-            "supplier", "purchase_date", "purchase_cost",
-            "commissioned_date", "warranty_until",
+            "code", "equipment_no", "asset_no", "serial_number", "name", "category", "plant", "location",
+            "manufacturer", "model_number", "year_made", "specifications",
             "maintenance_required", "maintenance_interval_days",
             "is_measuring_device", "notes",
         ]
         widgets = {
-            "purchase_date": DateInput(),
-            "commissioned_date": DateInput(),
-            "warranty_until": DateInput(),
             "specifications": forms.Textarea(attrs={"rows": 3}),
             "notes": forms.Textarea(attrs={"rows": 3}),
-            "code": forms.TextInput(attrs={"placeholder": "e.g. CTV20200077"}),
+            "code": forms.TextInput(attrs={"placeholder": "e.g. 70-000148"}),
+            "equipment_no": forms.TextInput(attrs={"placeholder": "e.g. DMM-001"}),
             "asset_no": forms.TextInput(attrs={"placeholder": "e.g. 103220100359"}),
-            "voltage": forms.TextInput(attrs={"placeholder": "e.g. AC220V"}),
-            "dimensions": forms.TextInput(attrs={"placeholder": "e.g. 105 × 65 × 160"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -67,8 +60,6 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
         self.fields["category"].queryset = Category.objects.active()
         self.fields["location"].queryset = Location.objects.active()
         self.fields["location"].empty_label = "— not set yet —"
-        self.fields["supplier"].queryset = Supplier.objects.active()
-        self.fields["supplier"].required = False
         self._load_schedules()
         offer_photo_removal(self)
         offer_photo_removal(self, field="remove_nameplate_photos", attr="nameplate_photos")
@@ -84,6 +75,9 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
     def clean_code(self):
         # The ID goes on the QR label, so normalise case and stray spaces.
         return self.cleaned_data["code"].strip().upper()
+
+    def clean_equipment_no(self):
+        return self.cleaned_data.get("equipment_no", "").strip().upper()
 
     def clean_asset_no(self):
         value = " ".join(self.cleaned_data.get("asset_no", "").split()).upper()
@@ -164,16 +158,6 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
             last, due = cleaned.get(last_field), cleaned.get(next_field)
             if last and due and due < last:
                 self.add_error(next_field, "The next one cannot come before the last one.")
-        purchase = cleaned.get("purchase_date")
-        commissioned = cleaned.get("commissioned_date")
-        warranty = cleaned.get("warranty_until")
-
-        if purchase and commissioned and commissioned < purchase:
-            self.add_error(
-                "commissioned_date", "In-service date cannot precede the purchase date."
-            )
-        if purchase and warranty and warranty < purchase:
-            self.add_error("warranty_until", "Warranty cannot end before the purchase date.")
         return cleaned
 
 
@@ -230,7 +214,7 @@ class EquipmentImportForm(forms.Form):
 
     file = forms.FileField(label="Excel file (.xlsx)")
     update_existing = forms.BooleanField(
-        label="Update assets that already exist (matched on Equipment ID)",
+        label="Update assets that already exist (matched on ZT Code)",
         required=False,
         help_text="Leave unticked and rows with an existing ID are skipped instead of overwritten.",
     )

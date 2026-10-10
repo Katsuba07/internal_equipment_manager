@@ -170,6 +170,28 @@ DJANGO_TABLES2_TEMPLATE = "tables/table.html"
 
 # Attachment size ceiling (incident photos, calibration certificates)
 EMA_MAX_UPLOAD_MB = int(os.getenv("EMA_MAX_UPLOAD_MB", "20"))
+
+# Asset label: the company line at the top, and where its QR code points.
+# {code} is replaced by the asset's ZT Code.
+EMA_LABEL_COMPANY = os.getenv("EMA_LABEL_COMPANY", "COMPUTIME VIETNAM")
+EMA_LABEL_QR_URL = os.getenv(
+    "EMA_LABEL_QR_URL",
+    "https://computime.datafill.com/AssetManagement_VN?Param={code}&Task=AssetNo",
+)
+# The label stock the label page starts from, in millimetres: one label's
+# width and height, how many labels sit side by side on the roll, and the gap
+# between them. Each computer can adjust it on the label page.
+EMA_LABEL_SIZE = {
+    "w": float(os.getenv("EMA_LABEL_WIDTH_MM", "45")),
+    "h": float(os.getenv("EMA_LABEL_HEIGHT_MM", "25")),
+    "cols": int(os.getenv("EMA_LABEL_COLUMNS", "2")),
+    "gap": float(os.getenv("EMA_LABEL_GAP_MM", "0")),
+}
+# The Zebra label printer: its name in Windows on the computer running the
+# app, or host:port (port 9100) for one on the network. EMA_LABEL_DPI is the
+# print head's resolution: 203, 300 or 600.
+EMA_LABEL_PRINTER = os.getenv("EMA_LABEL_PRINTER", "ZDesigner ZT510-300dpi ZPL")
+EMA_LABEL_DPI = int(os.getenv("EMA_LABEL_DPI", "300"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = EMA_MAX_UPLOAD_MB * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
@@ -182,6 +204,8 @@ EMA_DOCS_ROOT = Path(os.getenv("EMA_DOCS_ROOT")) if os.getenv("EMA_DOCS_ROOT") e
 # make their own.
 if "test" in sys.argv[1:2]:
     EMA_DOCS_ROOT = None
+    # ...and never feeds a label through the real printer.
+    EMA_LABEL_PRINTER = ""
 EMA_DOCS_SHAREPOINT_SITE = os.getenv("EMA_DOCS_SHAREPOINT_SITE", "https://computimehk.sharepoint.com")
 EMA_DOCS_SHAREPOINT_FOLDER = os.getenv(
     "EMA_DOCS_SHAREPOINT_FOLDER", "/sites/CTV/Shared Documents/CTV3/MP lines Prepare Setup CTVN CTV3/TE"

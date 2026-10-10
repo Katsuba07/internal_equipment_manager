@@ -1,5 +1,6 @@
 """Equipment screens."""
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -29,6 +30,7 @@ from systems.services import equipment_usage
 from .deletion import delete_assets, history_counts
 from .filters import EquipmentFilter
 from .forms import EquipmentForm, EquipmentImportForm, StatusChangeForm
+from .labels import LabelPrintError, LabelSize, build_zpl, send_to_printer
 from .models import Equipment, EquipmentStatus
 from .services import build_template_workbook, export_equipment_to_xlsx, import_equipment_from_xlsx
 from .tables import EquipmentTable
@@ -80,6 +82,7 @@ class EquipmentSearchView(LoginRequiredMixin, View):
         if query:
             assets = assets.filter(
                 Q(code__icontains=query)
+                | Q(equipment_no__icontains=query)
                 | Q(asset_no__icontains=query)
                 | Q(name__icontains=query)
                 | Q(serial_number__icontains=query)
@@ -102,7 +105,7 @@ class EquipmentSearchView(LoginRequiredMixin, View):
                 "id": asset.pk,
                 "code": asset.code,
                 "name": asset.name,
-                "ids": " · ".join(x for x in [asset.asset_no, asset.serial_number] if x),
+                "ids": " · ".join(x for x in [asset.equipment_no, asset.asset_no, asset.serial_number] if x),
                 "where": " · ".join(x for x in [asset.location.name if asset.location_id else "", asset.plant_display] if x and x != "—"),
                 "status": asset.get_status_display(),
                 "on_list": asset.pk in listed_ids,
@@ -170,6 +173,9 @@ class EquipmentDetailView(LoginRequiredMixin, DetailView):
         context["status_history"] = self.object.status_history.all()[:50]
         context["calibration_plans"] = self.object.calibration_plans.filter(is_active=True)
         context["maintenance_plans"] = self.object.maintenance_plans.filter(is_active=True)
+        context["maintenance_records"] = self.object.maintenance_records.select_related(
+            "plan", "performed_by"
+        )[:20]
         # Where this asset is used and where it physically sits — the cross-use
         # answer from the component's own side.
         context["usage"] = equipment_usage(self.object)
@@ -179,6 +185,41 @@ class EquipmentDetailView(LoginRequiredMixin, DetailView):
             transaction_type="OUT"
         ).select_related("item", "performed_by")[:20]
         return context
+
+
+class EquipmentLabelView(LoginRequiredMixin, DetailView):
+    """The asset's label, sized for the label printer (the size is adjustable on the page)."""
+
+    model = Equipment
+    template_name = "equipment/label.html"
+    context_object_name = "equipment"
+
+    def get_context_data(self, **kwargs):
+        import qrcode
+        import qrcode.image.svg
+
+        context = super().get_context_data(**kwargs)
+        image = qrcode.make(
+            self.object.label_qr_url, image_factory=qrcode.image.svg.SvgPathImage, border=0,
+        )
+        context["qr_svg"] = image.to_string(encoding="unicode")
+        context["company"] = settings.EMA_LABEL_COMPANY
+        context["label_size"] = {**settings.EMA_LABEL_SIZE, "dx": 0, "dy": 0, "font": 0}
+        context["printer"] = settings.EMA_LABEL_PRINTER
+        return context
+
+
+class EquipmentLabelPrintView(CanRecordMixin, View):
+    """Send the asset's label straight to the Zebra printer, as ZPL."""
+
+    def post(self, request, pk):
+        equipment = get_object_or_404(Equipment, pk=pk)
+        zpl = build_zpl(equipment, LabelSize.from_values(request.POST))
+        try:
+            send_to_printer(zpl, title=f"EMA label {equipment.code}")
+        except LabelPrintError as error:
+            return JsonResponse({"ok": False, "message": str(error)}, status=502)
+        return JsonResponse({"ok": True, "message": f"Sent to {settings.EMA_LABEL_PRINTER}."})
 
 
 class PartsFormsetMixin:

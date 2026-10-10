@@ -13,6 +13,7 @@
     <div class="card-body">
       <div class="field-grid">
         <div>{{ form.code|as_crispy_field }}</div>
+        <div>{{ form.equipment_no|as_crispy_field }}</div>
         <div>{{ form.asset_no|as_crispy_field }}</div>
         <div>{{ form.serial_number|as_crispy_field }}</div>
         <div class="span-all">{{ form.name|as_crispy_field }}</div>
@@ -74,12 +75,6 @@
         <div>{{ form.manufacturer|as_crispy_field }}</div>
         <div>{{ form.model_number|as_crispy_field }}</div>
         <div>{{ form.year_made|as_crispy_field }}</div>
-        <div>{{ form.country_of_origin|as_crispy_field }}</div>
-        <div>{{ form.condition|as_crispy_field }}</div>
-        <div>{{ form.firmware_version|as_crispy_field }}</div>
-        <div>{{ form.voltage|as_crispy_field }}</div>
-        <div>{{ form.power_watt|as_crispy_field }}</div>
-        <div>{{ form.dimensions|as_crispy_field }}</div>
         <div class="span-all">{{ form.specifications|as_crispy_field }}</div>
       </div>
     </div>
@@ -120,19 +115,6 @@
     </template>
     <div class="card-body">
       <button type="button" class="btn btn-default btn-sm" id="parts-add" data-formset-add="parts"><i class="bi bi-plus-lg"></i> Add part row</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-head"><i class="bi bi-receipt"></i> Purchasing &amp; warranty</div>
-    <div class="card-body">
-      <div class="field-grid">
-        <div class="with-add"><div class="grow">{{ form.supplier|as_crispy_field }}</div><div class="qa-col"><label aria-hidden="true">&nbsp;</label>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new supplier" data-quick-add="{% url 'quick_add' 'supplier' %}" data-target="id_supplier"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></div>
-        <div>{{ form.purchase_date|as_crispy_field }}</div>
-        <div>{{ form.purchase_cost|as_crispy_field }}</div>
-        <div>{{ form.commissioned_date|as_crispy_field }}</div>
-        <div>{{ form.warranty_until|as_crispy_field }}</div>
-      </div>
     </div>
   </div>
 
