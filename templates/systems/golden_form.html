@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}{{ title }} — {{ step }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs">
+  <a href="{% url 'systems:products' %}">Products</a><span class="sep">/</span>
+  <a href="{{ back_url }}" class="mono">{{ step }}</a><span class="sep">/</span>
+  <span>{{ title }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:620px">
+  <div class="page-head">
+    <div>
+      <h1>{{ title }}</h1>
+      <div class="sub"><span class="mono">{{ step }}</span> · {{ step.process.name }}</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {{ form|crispy }}
+        <div class="row-flex mt-2">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> {{ submit }}</button>
+          <a href="{{ back_url }}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

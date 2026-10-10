@@ -32,6 +32,7 @@
           <td class="nowrap">
             <a class="fw-600" href="?process={{ s.step.pk }}" hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}">{{ s.step.process.code }}</a>
             <span class="subtle small">{{ s.step.roles.all|length }} role{{ s.step.roles.all|length|pluralize }}</span>
+            {% if s.golden.has_warning %}<span class="badge badge-warning" title="{{ s.golden.warnings|join:'; ' }}"><i class="bi bi-exclamation-triangle"></i> golden sample</span>{% endif %}
           </td>
           <td>
             {% for x in s.sets %}

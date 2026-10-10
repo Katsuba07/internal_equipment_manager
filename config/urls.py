@@ -11,6 +11,7 @@ urlpatterns = [
     path("favicon.ico", RedirectView.as_view(url=static("img/favicon.svg"), permanent=True)),
     path("equipment/", include("equipment.urls")),
     path("parts/", include("inventory.urls")),
+    path("maintenance/", include("maintenance.urls")),
     path("", include("systems.urls")),
     path("", include("core.urls")),
 ]

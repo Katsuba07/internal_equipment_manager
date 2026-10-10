@@ -30,7 +30,7 @@ from .mixins import CanManageMixin, CanRecordMixin
 from .models import Attachment, AttachmentKind
 
 # Records that may carry photos: "app_label.model" as in the URL.
-PHOTO_MODELS = {"equipment.equipment", "inventory.inventoryitem"}
+PHOTO_MODELS = {"equipment.equipment", "inventory.inventoryitem", "maintenance.maintenancerecord"}
 MAX_SIDE = 1600
 THUMB_SIDE = 360
 MAX_FILES = 10

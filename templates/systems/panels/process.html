@@ -131,4 +131,53 @@
     </table>
   </div>
   {% endif %}
+
+  {% comment %}
+    Golden samples belong to the process, not to one set. A shortfall or an
+    expired sample is a warning here and on the Overview; it never makes a
+    set "not ready".
+  {% endcomment %}
+  <div class="golden">
+    <div class="golden-head">
+      <span class="fw-600"><i class="bi bi-award"></i> Golden samples</span>
+      <span class="badge {% if golden.ok_usable < golden.ok_required %}badge-warning{% else %}badge-neutral{% endif %}">OK {{ golden.ok_usable }}/{{ golden.ok_required }}</span>
+      <span class="badge {% if golden.ng_usable < golden.ng_required %}badge-warning{% else %}badge-neutral{% endif %}">NG {{ golden.ng_usable }}/{{ golden.ng_required }}</span>
+      <span class="spacer"></span>
+      {% if user.can_manage %}
+      <a class="btn btn-default btn-sm" href="{% url 'systems:golden_required' step.pk %}" data-modal-form="{% url 'systems:golden_required' step.pk %}">Required quantity</a>
+      <a class="btn btn-default btn-sm" href="{% url 'systems:golden_create' step.pk %}" data-modal-form="{% url 'systems:golden_create' step.pk %}"><i class="bi bi-plus-lg"></i> Add sample</a>
+      {% endif %}
+    </div>
+    {% if golden.has_warning %}
+    <div class="alert alert-warning panel-alert"><i class="bi bi-exclamation-triangle"></i><div>{{ golden.warnings|join:" · " }}</div></div>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Sample</th><th>Type</th><th>Kept at</th><th>Validity</th><th>Status</th>{% if user.can_manage %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+          {% for sample in golden.samples %}
+          <tr>
+            <td>
+              {% with photo=sample.main_photo %}{% if photo %}<a href="{{ photo.file.url }}" data-lightbox title="{{ sample.code }}"><i class="bi bi-image"></i></a> {% endif %}{% endwith %}
+              <span class="mono fw-600">{{ sample.code }}</span>
+              {% if sample.expected_defect %}<div class="subtle small">{{ sample.expected_defect }}</div>{% endif %}
+            </td>
+            <td><span class="badge {% if sample.kind == 'OK' %}badge-success{% else %}badge-danger{% endif %}">{{ sample.kind }}</span></td>
+            <td class="subtle">{{ sample.storage_location|default:"—" }}</td>
+            <td><span class="badge {{ sample.validity_badge_class }}">{{ sample.validity_display }}</span></td>
+            <td><span class="badge {{ sample.status_badge_class }}">{{ sample.get_status_display }}</span></td>
+            {% if user.can_manage %}
+            <td class="nowrap text-end">
+              <a class="btn btn-ghost btn-icon btn-sm" title="Edit sample" href="{% url 'systems:golden_edit' sample.pk %}" data-modal-form="{% url 'systems:golden_edit' sample.pk %}"><i class="bi bi-pencil"></i></a>
+              {% if user.is_admin %}<a class="btn btn-ghost btn-icon btn-sm" title="Delete sample" href="{% url 'systems:golden_delete' sample.pk %}"><i class="bi bi-trash"></i></a>{% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="cell-muted">No golden samples recorded for this process.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>

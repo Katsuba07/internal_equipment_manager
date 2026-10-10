@@ -16,6 +16,8 @@ the same instrument can never be claimed by two sets at once. Closed
 installations are kept as the asset's fitting history.
 """
 
+from dataclasses import dataclass, field
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -24,7 +26,7 @@ from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
-from core.models import NamedCatalog, TimeStampedModel
+from core.models import AttachmentMixin, NamedCatalog, TimeStampedModel
 
 
 class SystemType(NamedCatalog):
@@ -111,6 +113,10 @@ class ProductProcess(TimeStampedModel):
     )
     position = models.PositiveIntegerField("Order", default=0)
     notes = models.CharField("Notes", max_length=255, blank=True)
+    # How many usable golden samples this process should hold. Zero means the
+    # process declares nothing, so it never warns.
+    golden_ok_required = models.PositiveSmallIntegerField("OK samples required", default=0)
+    golden_ng_required = models.PositiveSmallIntegerField("NG samples required", default=0)
 
     class Meta:
         verbose_name = "Product process"
@@ -169,6 +175,54 @@ class ProductProcess(TimeStampedModel):
     def next_set_number(self) -> int:
         last = self.sets.order_by("-number").values_list("number", flat=True).first()
         return (last or 0) + 1
+
+    def golden_status(self) -> "GoldenSummary":
+        """
+        Usable golden samples against what the process requires, and what to
+        chase. A warning only: it never changes whether a set is ready.
+        """
+        samples = list(self.golden_samples.all())      # honours a prefetch
+        usable = [s for s in samples if s.is_usable]
+        summary = GoldenSummary(
+            samples=samples,
+            ok_usable=sum(s.kind == GoldenKind.OK for s in usable),
+            ng_usable=sum(s.kind == GoldenKind.NG for s in usable),
+            ok_required=self.golden_ok_required,
+            ng_required=self.golden_ng_required,
+        )
+        for label, have, need in (
+            ("OK", summary.ok_usable, summary.ok_required),
+            ("NG", summary.ng_usable, summary.ng_required),
+        ):
+            if have < need:
+                missing = need - have
+                summary.warnings.append(f"{missing} {label} sample{'s' if missing != 1 else ''} missing")
+        for sample in samples:
+            if sample.status != GoldenStatus.ACTIVE:
+                continue
+            if sample.is_expired or sample.expires_soon:
+                summary.warnings.append(f"{sample.code} {sample.validity_display.lower()}")
+        return summary
+
+
+@dataclass
+class GoldenSummary:
+    """Golden samples of one product process, counted against its requirement."""
+
+    samples: list
+    ok_usable: int = 0
+    ng_usable: int = 0
+    ok_required: int = 0
+    ng_required: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def has_warning(self) -> bool:
+        return bool(self.warnings)
+
+    @property
+    def first_warning(self) -> str:
+        return self.warnings[0] if self.warnings else ""
 
 
 class ProcessRole(TimeStampedModel):
@@ -374,6 +428,113 @@ class Installation(TimeStampedModel):
         self.save(update_fields=["removed_at", "removed_by", "reason", "updated_at"])
         self.component.refresh_production_status(user)
         return self
+
+
+# ------------------------------------------------------------------ golden samples
+
+
+class GoldenKind(models.TextChoices):
+    OK = "OK", "OK (pass)"
+    NG = "NG", "NG (fail)"
+
+
+class GoldenStatus(models.TextChoices):
+    ACTIVE = "ACTIVE", "In use"
+    DAMAGED = "DAMAGED", "Damaged"
+    LOST = "LOST", "Lost"
+    REPLACED = "REPLACED", "Replaced"
+
+
+class GoldenSample(AttachmentMixin, TimeStampedModel):
+    """
+    A reference board kept for one process of one product: a known-good one
+    the station must pass, or a known-bad one it must fail.
+    """
+
+    # Days before ``valid_until`` when the warning starts.
+    WARNING_DAYS = 30
+
+    product_process = models.ForeignKey(
+        ProductProcess, verbose_name="Process", on_delete=models.CASCADE,
+        related_name="golden_samples",
+    )
+    code = models.CharField("Sample ID / serial", max_length=80)
+    kind = models.CharField("Type", max_length=2, choices=GoldenKind.choices, default=GoldenKind.OK)
+    expected_defect = models.CharField(
+        "Expected defect", max_length=200, blank=True,
+        help_text="For an NG sample: what the station must fail it on.",
+    )
+    storage_location = models.CharField("Kept at", max_length=120, blank=True)
+    valid_until = models.DateField(
+        "Valid until", null=True, blank=True, help_text="Leave empty if it does not expire.",
+    )
+    status = models.CharField(
+        "Status", max_length=10, choices=GoldenStatus.choices, default=GoldenStatus.ACTIVE,
+    )
+    notes = models.TextField("Notes", blank=True)
+
+    class Meta:
+        verbose_name = "Golden sample"
+        verbose_name_plural = "Golden samples"
+        ordering = ["-kind", "code"]     # OK first, then NG
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product_process", "code"], name="unique_golden_code_per_process"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.code} ({self.get_kind_display()})"
+
+    def get_absolute_url(self) -> str:
+        from django.urls import reverse
+
+        return f"{reverse('systems:products')}?process={self.product_process_id}"
+
+    @property
+    def days_left(self) -> int | None:
+        if not self.valid_until:
+            return None
+        return (self.valid_until - timezone.localdate()).days
+
+    @property
+    def is_expired(self) -> bool:
+        days = self.days_left
+        return days is not None and days < 0
+
+    @property
+    def expires_soon(self) -> bool:
+        days = self.days_left
+        return days is not None and 0 <= days <= self.WARNING_DAYS
+
+    @property
+    def is_usable(self) -> bool:
+        return self.status == GoldenStatus.ACTIVE and not self.is_expired
+
+    @property
+    def validity_display(self) -> str:
+        days = self.days_left
+        if days is None:
+            return "No expiry"
+        if days < 0:
+            return f"Expired {-days} day{'s' if days != -1 else ''} ago"
+        if days == 0:
+            return "Expires today"
+        if days <= self.WARNING_DAYS:
+            return f"Expires in {days} day{'s' if days != 1 else ''}"
+        return f"Valid until {self.valid_until:%d %b %Y}"
+
+    @property
+    def validity_badge_class(self) -> str:
+        if self.is_expired:
+            return "badge-danger"
+        if self.expires_soon:
+            return "badge-warning"
+        return "badge-neutral" if self.valid_until is None else "badge-success"
+
+    @property
+    def status_badge_class(self) -> str:
+        return "badge-success" if self.status == GoldenStatus.ACTIVE else "badge-muted"
 
 
 # ------------------------------------------------------------------ documents

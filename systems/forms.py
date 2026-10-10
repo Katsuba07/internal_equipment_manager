@@ -4,11 +4,11 @@ from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.urls import reverse
 
-from core.forms import retire_field
+from core.forms import DateInput, PhotosField, offer_photo_removal, photos_to_remove_field, retire_field
 from core.models import Category, Customer, Location, Product
 from equipment.models import Equipment
 
-from .models import ProcessRole, ProductProcess, SystemType, TestSet
+from .models import GoldenKind, GoldenSample, ProcessRole, ProductProcess, SystemType, TestSet
 
 
 class ProductForm(forms.ModelForm):
@@ -172,3 +172,49 @@ class SetLineForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["line"].queryset = Location.objects.active()
         self.fields["line"].empty_label = "— not set —"
+
+
+class GoldenSampleForm(forms.ModelForm):
+    """One reference board of a process. The process is set by the view."""
+
+    photos = PhotosField()
+    remove_photos = photos_to_remove_field()
+
+    class Meta:
+        model = GoldenSample
+        fields = ["code", "kind", "expected_defect", "storage_location", "valid_until", "status", "notes"]
+        widgets = {
+            "code": forms.TextInput(attrs={"placeholder": "e.g. GS-OK-01 or the board serial"}),
+            "expected_defect": forms.TextInput(attrs={"placeholder": "e.g. R12 open, must fail step 14"}),
+            "storage_location": forms.TextInput(attrs={"placeholder": "e.g. ESD cabinet 2, shelf B"}),
+            "valid_until": DateInput(),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, product_process=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.product_process = product_process or self.instance.product_process
+        offer_photo_removal(self)
+
+    def clean_code(self):
+        code = self.cleaned_data["code"].strip().upper()
+        clash = GoldenSample.objects.filter(product_process=self.product_process, code=code)
+        if self.instance.pk:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise forms.ValidationError(f"{self.product_process} already has a sample {code}.")
+        return code
+
+    def clean(self):
+        data = super().clean()
+        if data.get("kind") == GoldenKind.NG and not data.get("expected_defect"):
+            self.add_error("expected_defect", "Say what an NG sample must fail on.")
+        return data
+
+
+class GoldenRequirementForm(forms.ModelForm):
+    """How many usable OK and NG samples the process should hold."""
+
+    class Meta:
+        model = ProductProcess
+        fields = ["golden_ok_required", "golden_ng_required"]

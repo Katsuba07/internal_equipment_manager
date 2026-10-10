@@ -70,6 +70,17 @@
     {% endfor %}
   </div>
   {% endif %}
+  {% if line.golden_warnings %}
+  <div class="line-issues line-golden">
+    <div class="line-issues-head"><i class="bi bi-award"></i> Golden samples to check <span class="subtle">· does not stop a set</span></div>
+    {% for warning in line.golden_warnings %}
+    <a class="line-issue" href="{% url 'systems:products' %}?process={{ warning.step.pk }}">
+      <span class="mono fw-600">{{ warning.step }}</span>
+      <span class="issue-why">{{ warning.text }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
   {% else %}
   <div class="empty">
     <i class="bi bi-pause-circle"></i>
@@ -142,45 +153,72 @@
 {% endcomment %}
 <div class="section-title"><i class="bi bi-list-check"></i> To do</div>
 <div class="panel-row panel-row-4">
-  <div class="card">
+  <div class="card panel-wide">
     <div class="card-head">
-      <i class="bi bi-rulers"></i> Calibration
-      <span class="badge {% if calibration_overdue_count %}badge-danger{% else %}badge-neutral{% endif %}">{{ calibration_due_count }}</span>
-      <span class="spacer sub">next 30 days</span>
+      <i class="bi bi-calendar3"></i> Due dates
+      <span class="spacer no-print"></span>
+      <div class="tabs due-view-tabs no-print" data-tabs data-tabs-for="due-dates" role="tablist">
+        <button type="button" class="tab active" data-tab-target="calendar">Calendar</button>
+        <button type="button" class="tab" data-tab-target="list">List <span class="badge badge-neutral">{{ due_list_count }}</span></button>
+      </div>
     </div>
-    <div class="rows scroll-list">
-      {% for plan in calibration_due %}
-      <a class="row-item" href="{{ plan.equipment.get_absolute_url }}"
-         title="{{ plan.equipment.name }} — {{ plan.name }}{% if plan.fitted_in %} · in {{ plan.fitted_in }}{% endif %}">
-        <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
-        <span class="mono">{{ plan.equipment.code }}</span>
-        <span class="row-main row-title">{% if plan.fitted_in %}<span class="in-set">{{ plan.fitted_in }}</span>{% else %}{{ plan.equipment.name }}{% endif %}</span>
-        <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
-      </a>
-      {% empty %}
-      <div class="empty"><i class="bi bi-check2-circle"></i><div class="title">All in date</div></div>
-      {% endfor %}
-    </div>
-  </div>
+    <div class="card-body">
+      <div class="cal-legend small no-print">
+        <span><span class="cal-dot cal-dot-calibration"></span> Calibration <span class="subtle">({{ calibration_due_count }} due within 30 days{% if calibration_overdue_count %}, {{ calibration_overdue_count }} overdue{% endif %})</span></span>
+        <span><span class="cal-dot cal-dot-maintenance"></span> Maintenance <span class="subtle">({{ maintenance_due_count }} due within 7 days{% if maintenance_overdue_count %}, {{ maintenance_overdue_count }} overdue{% endif %})</span></span>
+      </div>
 
-  <div class="card">
-    <div class="card-head">
-      <i class="bi bi-calendar-check"></i> Maintenance
-      <span class="badge {% if maintenance_overdue_count %}badge-warning{% else %}badge-neutral{% endif %}">{{ maintenance_due_count }}</span>
-      <span class="spacer sub">next 7 days</span>
-    </div>
-    <div class="rows scroll-list">
-      {% for plan in maintenance_due %}
-      <a class="row-item" href="{{ plan.equipment.get_absolute_url }}"
-         title="{{ plan.equipment.name }} — {{ plan.name }}{% if plan.fitted_in %} · in {{ plan.fitted_in }}{% endif %}{% if plan.assignee %} · {{ plan.assignee.get_full_name }}{% endif %}">
-        <span class="dot dot-{{ plan.due_badge_class|cut:'badge-' }}"></span>
-        <span class="mono">{{ plan.equipment.code }}</span>
-        <span class="row-main row-title">{{ plan.name }}</span>
-        <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
-      </a>
-      {% empty %}
-      <div class="empty"><i class="bi bi-check2-circle"></i><div class="title">Nothing due</div></div>
-      {% endfor %}
+      <div data-tab-panel="calendar" data-tabs-group="due-dates">
+        <div class="cal-nav no-print">
+          <a class="btn btn-ghost btn-icon btn-sm" href="?month={{ calendar_prev }}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+          <span class="cal-month">{{ calendar_month_label }}</span>
+          <a class="btn btn-ghost btn-icon btn-sm" href="?month={{ calendar_next }}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+          {% if not calendar_is_current_month %}<a href="{{ request.path }}" class="small">Today</a>{% endif %}
+        </div>
+        <div class="cal-grid">
+          <div class="cal-headrow">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+          {% for week in calendar_weeks %}
+          <div class="cal-week">
+            {% for day in week %}
+            <div class="cal-day{% if not day.in_month %} out-month{% endif %}{% if day.is_today %} is-today{% endif %}">
+              <span class="cal-daynum">{{ day.date|date:"j" }}</span>
+              {% if day.items %}
+              <div class="cal-items">
+                {% for entry in day.items %}
+                <a class="cal-chip cal-chip-{{ entry.kind }}" href="{{ entry.plan.equipment.get_absolute_url }}"
+                   title="{{ entry.plan.equipment.code }} — {{ entry.plan.name }}{% if entry.plan.fitted_in %} · in {{ entry.plan.fitted_in }}{% endif %}">{{ entry.plan.equipment.code }}</a>
+                {% endfor %}
+                {% if day.overflow %}<span class="cal-more">+{{ day.overflow }} more</span>{% endif %}
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div data-tab-panel="list" data-tabs-group="due-dates" hidden>
+        <div class="rows scroll-list">
+          {% for entry in due_list %}
+          <a class="row-item" href="{{ entry.plan.equipment.get_absolute_url }}"
+             title="{{ entry.plan.equipment.name }} — {{ entry.plan.name }}{% if entry.plan.fitted_in %} · in {{ entry.plan.fitted_in }}{% endif %}">
+            <span class="cal-dot cal-dot-{{ entry.kind }}"></span>
+            <span class="mono">{{ entry.plan.equipment.code }}</span>
+            <span class="row-main row-title">{% if entry.plan.fitted_in %}<span class="in-set">{{ entry.plan.fitted_in }}</span>{% else %}{{ entry.plan.name }}{% endif %}</span>
+            <span class="subtle small">{{ entry.kind|capfirst }}</span>
+            <span class="badge {{ entry.plan.due_badge_class }}">{{ entry.plan.due_display }}</span>
+          </a>
+          {% empty %}
+          <div class="empty"><i class="bi bi-check2-circle"></i><div class="title">Nothing on a schedule</div></div>
+          {% endfor %}
+        </div>
+        {% if due_list_count > due_list|length %}
+        <div class="small subtle" style="padding:0.3rem 0.6rem">Showing the {{ due_list|length }} soonest of {{ due_list_count }}.</div>
+        {% endif %}
+      </div>
     </div>
   </div>
 

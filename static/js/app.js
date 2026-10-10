@@ -117,6 +117,26 @@
     });
   });
 
+  /* ---------- Section tabs ---------- */
+  // <div class="tabs" data-tabs> holds <button data-tab-target="key">; sibling
+  // [data-tab-panel="key"] elements show/hide — client-side, no page reload.
+  // The first tab is active by default; @media print shows every panel.
+
+  document.addEventListener("click", function (event) {
+    var tab = event.target.closest("[data-tab-target]");
+    if (!tab) return;
+    var tabs = tab.closest("[data-tabs]");
+    if (!tabs) return;
+    var key = tab.getAttribute("data-tab-target");
+    tabs.querySelectorAll("[data-tab-target]").forEach(function (btn) {
+      btn.classList.toggle("active", btn === tab);
+    });
+    var panels = tabs.getAttribute("data-tabs-for");
+    document.querySelectorAll('[data-tab-panel][data-tabs-group="' + panels + '"]').forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-tab-panel") !== key;
+    });
+  });
+
   /* ---------- Role picker: add an equipment type without typing its code ---------- */
   // <select data-role-picker-select> next to <textarea data-role-picker-textarea>,
   // both inside [data-role-picker] (see RolePickerWidget) — picking an option

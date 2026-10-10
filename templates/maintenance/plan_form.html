@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if editing %}Edit plan{% else %}New plan{% endif %} — {{ equipment.code }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs">
+  <a href="{% url 'equipment:list' %}">Equipment</a><span class="sep">/</span>
+  <a href="{{ equipment.get_absolute_url }}" class="mono">{{ equipment.code }}</a><span class="sep">/</span>
+  <span>{% if editing %}Edit plan{% else %}New plan{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:620px">
+  <div class="page-head">
+    <div>
+      <h1>{% if editing %}Edit maintenance plan{% else %}New maintenance plan{% endif %}</h1>
+      <div class="sub"><span class="mono">{{ equipment.code }}</span> · {{ equipment.name }}</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form|crispy }}
+        <div class="row-flex mt-2">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> {% if editing %}Save{% else %}Create{% endif %}</button>
+          <a href="{{ equipment.get_absolute_url }}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

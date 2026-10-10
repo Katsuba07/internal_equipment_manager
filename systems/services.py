@@ -16,6 +16,7 @@ from equipment.models import UNAVAILABLE_STATUSES, Equipment
 
 from .models import (
     SLOT_STATE_BADGE,
+    GoldenSample,
     Installation,
     ProcessRole,
     ProductDocument,
@@ -32,6 +33,9 @@ def unusable_reason(equipment: Equipment) -> str:
     for plan in equipment.calibration_plans.all():
         if plan.is_active and plan.is_overdue:
             return f"Calibration {plan.due_display.lower()}"
+    for plan in equipment.maintenance_plans.all():
+        if plan.is_active and plan.is_overdue:
+            return f"Maintenance {plan.due_display.lower()}"
     return ""
 
 
@@ -121,7 +125,7 @@ def evaluate_set(test_set: TestSet, roles=None, installations=None) -> SetReadin
     if installations is None:
         installations = list(
             test_set.open_installations().select_related("component__category")
-            .prefetch_related("component__calibration_plans")
+            .prefetch_related("component__calibration_plans", "component__maintenance_plans")
         )
     by_role = {inst.role_id: inst for inst in installations}
 
@@ -198,6 +202,7 @@ def products_overview(show_all: bool = False, plant: str = "", query: str = "", 
                 queryset=ProductProcess.objects.select_related("process").prefetch_related(
                     Prefetch("roles", queryset=ProcessRole.objects.select_related("category")),
                     Prefetch("sets", queryset=TestSet.objects.select_related("line").order_by("number")),
+                    "golden_samples",
                 ),
             )
         )
@@ -207,7 +212,7 @@ def products_overview(show_all: bool = False, plant: str = "", query: str = "", 
     for inst in (
         Installation.objects.filter(removed_at__isnull=True, test_set__isnull=False)
         .select_related("component__category")
-        .prefetch_related("component__calibration_plans")
+        .prefetch_related("component__calibration_plans", "component__maintenance_plans")
     ):
         open_installs.setdefault(inst.test_set_id, []).append(inst)
 
@@ -233,7 +238,7 @@ def products_overview(show_all: bool = False, plant: str = "", query: str = "", 
                     "installations": installs,
                     "readiness": evaluate_set(test_set, roles, installs),
                 })
-            steps.append({"step": step, "sets": sets})
+            steps.append({"step": step, "sets": sets, "golden": step.golden_status()})
         groups.setdefault(key, (product.customer, []))[1].append({"product": product, "steps": steps})
 
     for _customer, items in groups.values():
@@ -248,7 +253,10 @@ def set_detail(test_set: TestSet) -> dict:
     installs = list(
         test_set.open_installations()
         .select_related("component__category", "component__location")
-        .prefetch_related("component__calibration_plans", "component__parts__item", "component__attachments")
+        .prefetch_related(
+            "component__calibration_plans", "component__maintenance_plans",
+            "component__parts__item", "component__attachments",
+        )
     )
     readiness = evaluate_set(test_set, installations=installs)
     return {"test_set": test_set, "readiness": readiness}
@@ -307,10 +315,15 @@ def deletion_summary(obj) -> dict:
             ("Processes", obj.processes.count()),
             ("Roles", ProcessRole.objects.filter(product_process__product=obj).count()),
             ("Equipment sets", sets.count()),
+            ("Golden samples", GoldenSample.objects.filter(product_process__product=obj).count()),
         ]
     elif isinstance(obj, ProductProcess):
         sets = obj.sets.all()
-        removed = [("Roles", obj.roles.count()), ("Equipment sets", sets.count())]
+        removed = [
+            ("Roles", obj.roles.count()),
+            ("Equipment sets", sets.count()),
+            ("Golden samples", obj.golden_samples.count()),
+        ]
     elif isinstance(obj, TestSet):
         sets = TestSet.objects.filter(pk=obj.pk)
         removed = []
@@ -363,12 +376,15 @@ def line_status() -> dict:
     The top of the Overview page: every product in production with the state of
     each of its sets, and the list of what is wrong, worst first.
     """
-    rows, issues = [], []
+    rows, issues, golden_warnings = [], [], []
     ready = total = 0
     for group in products_overview(show_all=False):
         for item in group.products:
             product, pills, bad = item["product"], [], False
             for step in item["steps"]:
+                # Golden samples are a warning beside the line, never a blocker.
+                for warning in step["golden"].warnings:
+                    golden_warnings.append({"step": step["step"], "text": warning})
                 for entry in step["sets"]:
                     readiness = entry["readiness"]
                     total += 1
@@ -385,6 +401,7 @@ def line_status() -> dict:
     return {
         "rows": rows,
         "issues": issues,
+        "golden_warnings": golden_warnings,
         "sets_total": total,
         "sets_ready": ready,
         "sets_bad": total - ready,

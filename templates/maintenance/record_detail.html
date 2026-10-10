@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Maintenance {{ record.performed_at|date:"d M Y" }} — {{ record.equipment.code }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs no-print">
+  <a href="{% url 'equipment:list' %}">Equipment</a><span class="sep">/</span>
+  <a href="{{ record.equipment.get_absolute_url }}" class="mono">{{ record.equipment.code }}</a><span class="sep">/</span>
+  <span>Maintenance {{ record.performed_at|date:"d M Y" }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="row-flex mb-1">
+      <h1>{{ record.get_kind_display }}</h1>
+      <span class="badge {{ record.result_badge_class }}">{{ record.get_result_display }}</span>
+    </div>
+    <div class="sub">
+      <a class="mono" href="{{ record.equipment.get_absolute_url }}">{{ record.equipment.code }}</a>
+      {{ record.equipment.name }} · {{ record.performed_at|date:"d M Y" }}
+      {% if record.plan %} · against <span class="mono">{{ record.plan.name }}</span>{% else %} · unplanned{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><i class="bi bi-clipboard-check"></i> Work performed</div>
+      <div class="card-body">
+        <div class="defs">
+          <div class="wide"><div class="k">Work done</div><div class="v">{{ record.work_done|linebreaksbr }}</div></div>
+          {% if record.checklist_result %}
+          <div class="wide"><div class="k">Checklist result</div><div class="v">{{ record.checklist_result|linebreaksbr }}</div></div>
+          {% endif %}
+          <div><div class="k">Downtime</div><div class="v">{{ record.downtime_minutes }} min</div></div>
+          <div><div class="k">Cost</div><div class="v {% if not record.cost %}empty{% endif %}">{% if record.cost %}${{ record.cost|floatformat:2 }}{% else %}—{% endif %}</div></div>
+          <div><div class="k">Performed by</div><div class="v {% if not record.performed_by %}empty{% endif %}">{{ record.performed_by.get_full_name|default:"—" }}</div></div>
+          {% if record.notes %}<div class="wide"><div class="k">Notes</div><div class="v">{{ record.notes|linebreaksbr }}</div></div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    {% url 'photo_upload' 'maintenance' 'maintenancerecord' record.pk as upload_url %}
+    {% include "core/_photos.html" with obj=record upload_url=upload_url %}
+  </div>
+</div>
+{% endblock %}

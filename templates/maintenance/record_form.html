@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Log maintenance — {{ equipment.code }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs">
+  <a href="{% url 'equipment:list' %}">Equipment</a><span class="sep">/</span>
+  <a href="{{ equipment.get_absolute_url }}" class="mono">{{ equipment.code }}</a><span class="sep">/</span>
+  <span>Log maintenance</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:620px">
+  <div class="page-head">
+    <div>
+      <h1>Log maintenance</h1>
+      <div class="sub"><span class="mono">{{ equipment.code }}</span> · {{ equipment.name }}</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {{ form|crispy }}
+        <div class="row-flex mt-2">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Log</button>
+          <a href="{{ equipment.get_absolute_url }}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

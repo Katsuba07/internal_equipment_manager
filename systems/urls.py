@@ -27,6 +27,11 @@ urlpatterns = [
     path("products/process/<int:pk>/copy-template/", views.CopyTemplateView.as_view(), name="process_copy_template"),
     path("products/process/<int:pk>/add-set/", views.AddSetView.as_view(), name="set_add"),
     path("products/set/<int:pk>/edit/", views.SetEditView.as_view(), name="set_edit"),
+    # Golden samples of a process (dialogs opened from the process panel)
+    path("products/process/<int:pk>/golden/new/", views.GoldenSampleCreateView.as_view(), name="golden_create"),
+    path("products/process/<int:pk>/golden/required/", views.GoldenRequirementView.as_view(), name="golden_required"),
+    path("products/golden/<int:pk>/edit/", views.GoldenSampleUpdateView.as_view(), name="golden_edit"),
+    path("products/golden/<int:pk>/delete/", views.GoldenSampleDeleteView.as_view(), name="golden_delete"),
     # One-click delete (confirmation page)
     path("products/product/<int:pk>/delete/", views.ProductDeleteView.as_view(), name="product_delete"),
     path("products/process/<int:pk>/delete/", views.ProcessDeleteView.as_view(), name="process_delete"),

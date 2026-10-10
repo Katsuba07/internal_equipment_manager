@@ -20,5 +20,6 @@ if (-not (Test-Path $python)) {
 }
 
 $env:EMA_DEBUG = "True"
-Write-Host "`nDevelopment mode - open http://localhost:8000`n" -ForegroundColor Cyan
+Write-Host "`nDevelopment mode - open http://localhost:8000" -ForegroundColor Cyan
+Write-Host "Code and template changes apply automatically — no restart needed.`n" -ForegroundColor Cyan
 & $python manage.py runserver 0.0.0.0:8000

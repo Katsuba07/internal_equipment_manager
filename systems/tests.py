@@ -18,7 +18,10 @@ from django.utils import timezone
 from calibration.models import CalibrationPlan
 from core.models import Category, Customer, Location, Product, Role, User
 from equipment.models import Equipment, EquipmentStatus
+from maintenance.models import MaintenancePlan
 from systems.models import (
+    GoldenSample,
+    GoldenStatus,
     Installation,
     ProcessRole,
     ProductProcess,
@@ -154,6 +157,16 @@ class FitTests(Fixture, TestCase):
     def test_overdue_calibration_makes_an_asset_unusable(self):
         CalibrationPlan.objects.create(
             equipment=self.dmm1, name="Annual", interval_months=12,
+            next_due_at=timezone.localdate() - timedelta(days=3),
+        )
+        Installation.fit(self.dmm1, self.set1, self.role(self.set1, "DMM"), self.admin)
+        status = next(s for s in evaluate_set(self.set1).lines if s.role.category == self.dmm_cat)
+        self.assertEqual(status.state, SlotState.UNUSABLE)
+        self.assertIn("overdue", status.detail)
+
+    def test_overdue_maintenance_makes_an_asset_unusable(self):
+        MaintenancePlan.objects.create(
+            equipment=self.dmm1, name="Contact check", interval_days=90,
             next_due_at=timezone.localdate() - timedelta(days=3),
         )
         Installation.fit(self.dmm1, self.set1, self.role(self.set1, "DMM"), self.admin)
@@ -457,3 +470,110 @@ class IdleProductTests(Fixture, TestCase):
         self.assertIn("All products", body)
         body = self.client.get(reverse("systems:products"), {"show": "production"}).content.decode()
         self.assertNotIn("BAF0850", body)
+
+
+class GoldenSampleTests(Fixture, TestCase):
+    """Golden samples of a product process: counted, warned about, never blocking."""
+
+    def setUp(self):
+        self.step = self.make_step()
+        self.step.golden_ok_required = 1
+        self.step.golden_ng_required = 1
+        self.step.save()
+        self.set1 = self.make_set(self.step)
+        self.today = timezone.localdate()
+
+    def sample(self, code, kind="OK", **fields):
+        if kind == "NG":
+            fields.setdefault("expected_defect", "R12 open")
+        return GoldenSample.objects.create(product_process=self.step, code=code, kind=kind, **fields)
+
+    def test_shortfall_is_reported_per_type(self):
+        self.sample("GS-OK-01")
+        status = self.step.golden_status()
+        self.assertEqual((status.ok_usable, status.ng_usable), (1, 0))
+        self.assertEqual(status.warnings, ["1 NG sample missing"])
+
+    def test_expired_damaged_and_lost_samples_do_not_count(self):
+        self.sample("GS-OK-01", valid_until=self.today - timedelta(days=5))
+        self.sample("GS-OK-02", status=GoldenStatus.DAMAGED)
+        self.sample("GS-NG-01", kind="NG", status=GoldenStatus.LOST)
+        status = self.step.golden_status()
+        self.assertEqual((status.ok_usable, status.ng_usable), (0, 0))
+        self.assertIn("1 OK sample missing", status.warnings)
+        self.assertIn("GS-OK-01 expired 5 days ago", status.warnings)
+
+    def test_a_sample_about_to_expire_still_counts_but_warns(self):
+        self.sample("GS-OK-01", valid_until=self.today + timedelta(days=9))
+        self.sample("GS-NG-01", kind="NG")
+        status = self.step.golden_status()
+        self.assertEqual((status.ok_usable, status.ng_usable), (1, 1))
+        self.assertEqual(status.warnings, ["GS-OK-01 expires in 9 days"])
+
+    def test_a_process_that_requires_nothing_never_warns(self):
+        other = self.make_step(product=self.baf0850)
+        self.assertFalse(other.golden_status().has_warning)
+
+    def test_a_golden_warning_does_not_change_set_readiness(self):
+        for label, asset in (("Test Cart", self.cart1), ("Fixture", self.fix1), ("DMM", self.dmm1)):
+            Installation.fit(asset, self.set1, self.role(self.set1, label), self.users[Role.ADMIN])
+        self.assertTrue(self.step.golden_status().has_warning)
+        self.assertTrue(evaluate_set(self.set1).is_ready)
+
+    def test_manager_adds_a_sample_and_sets_the_requirement(self):
+        self.login(Role.MANAGER)
+        response = self.client.post(reverse("systems:golden_create", args=[self.step.pk]), {
+            "code": "gs-ok-01", "kind": "OK", "status": "ACTIVE", "storage_location": "Cabinet 2",
+        })
+        self.assertRedirects(response, reverse("systems:products") + f"?process={self.step.pk}",
+                             fetch_redirect_response=False)
+        self.assertEqual(self.step.golden_samples.get().code, "GS-OK-01")
+
+        self.client.post(reverse("systems:golden_required", args=[self.step.pk]), {
+            "golden_ok_required": "2", "golden_ng_required": "3",
+        })
+        self.step.refresh_from_db()
+        self.assertEqual((self.step.golden_ok_required, self.step.golden_ng_required), (2, 3))
+
+    def test_ng_sample_needs_its_expected_defect_and_codes_are_unique(self):
+        self.login(Role.MANAGER)
+        url = reverse("systems:golden_create", args=[self.step.pk])
+        response = self.client.post(url, {"code": "GS-NG-01", "kind": "NG", "status": "ACTIVE"})
+        self.assertContains(response, "must fail on")
+        self.sample("GS-OK-01")
+        response = self.client.post(url, {"code": "GS-OK-01", "kind": "OK", "status": "ACTIVE"})
+        self.assertContains(response, "already has a sample")
+        self.assertEqual(self.step.golden_samples.count(), 1)
+
+    def test_manager_edits_but_only_admin_deletes(self):
+        sample = self.sample("GS-OK-01")
+        self.login(Role.MANAGER)
+        self.client.post(reverse("systems:golden_edit", args=[sample.pk]), {
+            "code": "GS-OK-01", "kind": "OK", "status": "DAMAGED",
+        })
+        sample.refresh_from_db()
+        self.assertEqual(sample.status, GoldenStatus.DAMAGED)
+        self.client.post(reverse("systems:golden_delete", args=[sample.pk]))
+        self.assertTrue(GoldenSample.objects.filter(pk=sample.pk).exists())
+        self.login(Role.ADMIN)
+        self.client.post(reverse("systems:golden_delete", args=[sample.pk]))
+        self.assertFalse(GoldenSample.objects.filter(pk=sample.pk).exists())
+
+    def test_technician_and_viewer_cannot_change_samples(self):
+        for role in (Role.TECHNICIAN, Role.VIEWER):
+            with self.subTest(role=role):
+                self.login(role)
+                self.client.post(reverse("systems:golden_create", args=[self.step.pk]), {
+                    "code": "GS-OK-09", "kind": "OK", "status": "ACTIVE",
+                })
+                self.assertFalse(self.step.golden_samples.exists())
+
+    def test_warning_shows_on_the_panel_the_list_and_the_overview(self):
+        self.login(Role.VIEWER)
+        panel = self.client.get(reverse("systems:products"), {"process": self.step.pk})
+        self.assertContains(panel, "Golden samples")
+        self.assertContains(panel, "1 OK sample missing")
+        self.assertContains(panel, "golden-warn")                 # the icon on the list
+        overview = self.client.get(reverse("dashboard"))
+        self.assertContains(overview, "Golden samples to check")
+        self.assertContains(overview, "1 NG sample missing")

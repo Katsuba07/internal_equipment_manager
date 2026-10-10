@@ -18,12 +18,22 @@ from django.urls import reverse
 from django.views import View
 
 from core.mixins import AdminRequiredMixin, CanManageMixin, CanRecordMixin
+from core.modals import modal_saved, render_modal, wants_modal
 from core.models import Customer, Plant, Product
+from core.photos import remove_photos, save_photos
 from equipment.models import Equipment
 
-from .forms import AddProcessForm, ProductForm, RoleFormSet, RoleSetupFormSet, SetLineForm
+from .forms import (
+    AddProcessForm,
+    GoldenRequirementForm,
+    GoldenSampleForm,
+    ProductForm,
+    RoleFormSet,
+    RoleSetupFormSet,
+    SetLineForm,
+)
 from .doc_sync import docs_root, folder_url, last_synced, maybe_sync
-from .models import DocumentSection, ProductProcess, TestSet
+from .models import DocumentSection, GoldenSample, ProductProcess, TestSet
 from .services import (
     apply_set_changes,
     busy_map,
@@ -134,10 +144,13 @@ def set_panel(request, pk, as_context=False):
 def product_panel(request, pk, as_context=False):
     product = get_object_or_404(Product.objects.select_related("customer"), pk=pk)
     steps = []
-    for step in product.processes.select_related("process").prefetch_related("sets__line", "roles"):
+    for step in product.processes.select_related("process").prefetch_related(
+        "sets__line", "roles", "golden_samples"
+    ):
         steps.append({
             "step": step,
             "sets": [{"set": s, "readiness": evaluate_set(s)} for s in step.sets.all()],
+            "golden": step.golden_status(),
         })
     context = {
         "template": "systems/panels/product.html",
@@ -195,6 +208,7 @@ def process_panel(request, pk, as_context=False, formset=None, line_form=None, e
         ),
         "line_form": line_form or (SetLineForm(instance=active, prefix="set") if active else None),
         "error": error,
+        "golden": step.golden_status(),
     }
     return _panel(request, context, as_context)
 
@@ -487,6 +501,124 @@ class AddSetView(CanRecordMixin, View):
         test_set = TestSet.objects.create(product_process=step, number=step.next_set_number())
         messages.success(request, f"Added {test_set}. Type the equipment ID, asset no. or S/N for each role.")
         return go(request, page_url("process", step.pk) + f"&tab={test_set.pk}")
+
+
+# ------------------------------------------------------------------ golden samples
+
+
+class GoldenDialogView(CanManageMixin, View):
+    """
+    A golden-sample form: a dialog from the process panel, a small page when
+    opened directly. Saving returns to the process panel either way.
+    """
+
+    title = ""
+    submit = "Save"
+
+    def get_step(self):
+        return get_object_or_404(
+            ProductProcess.objects.select_related("product", "process"), pk=self.kwargs["pk"]
+        )
+
+    def get_form(self, data=None, files=None):
+        raise NotImplementedError
+
+    def saved(self, form) -> str:
+        """Save and return the message to show."""
+        raise NotImplementedError
+
+    def respond(self, form):
+        if wants_modal(self.request):
+            return render_modal(
+                self.request, form, title=f"{self.title}: {self.step}",
+                action=self.request.get_full_path(), submit=self.submit,
+            )
+        return render(self.request, "systems/golden_form.html", {
+            "form": form, "step": self.step, "title": self.title, "submit": self.submit,
+            "back_url": page_url("process", self.step.pk),
+        })
+
+    def get(self, request, pk):
+        self.step = self.get_step()
+        return self.respond(self.get_form())
+
+    def post(self, request, pk):
+        self.step = self.get_step()
+        form = self.get_form(request.POST, request.FILES)
+        if not form.is_valid():
+            return self.respond(form)
+        messages.success(request, self.saved(form))
+        if wants_modal(request):
+            return modal_saved()
+        return redirect(page_url("process", self.step.pk))
+
+
+class GoldenSampleCreateView(GoldenDialogView):
+    title = "New golden sample"
+    submit = "Add"
+
+    def get_form(self, data=None, files=None):
+        return GoldenSampleForm(data, files, product_process=self.step)
+
+    def saved(self, form):
+        sample = form.save(commit=False)
+        sample.product_process = self.step
+        sample.save()
+        save_photos(sample, form.cleaned_data.get("photos"), self.request.user)
+        return f"Added golden sample {sample.code} to {self.step}."
+
+
+class GoldenSampleUpdateView(GoldenDialogView):
+    title = "Edit golden sample"
+
+    def get_step(self):
+        self.sample = get_object_or_404(
+            GoldenSample.objects.select_related("product_process__product", "product_process__process"),
+            pk=self.kwargs["pk"],
+        )
+        return self.sample.product_process
+
+    def get_form(self, data=None, files=None):
+        return GoldenSampleForm(data, files, instance=self.sample)
+
+    def saved(self, form):
+        sample = form.save()
+        remove_photos(sample, form.cleaned_data.get("remove_photos"))
+        save_photos(sample, form.cleaned_data.get("photos"), self.request.user)
+        return f"Saved golden sample {sample.code}."
+
+
+class GoldenRequirementView(GoldenDialogView):
+    title = "Golden samples required"
+
+    def get_form(self, data=None, files=None):
+        return GoldenRequirementForm(data, instance=self.step)
+
+    def saved(self, form):
+        step = form.save()
+        return f"{step} now needs {step.golden_ok_required} OK and {step.golden_ng_required} NG."
+
+
+class GoldenSampleDeleteView(AdminRequiredMixin, View):
+    """For a sample entered by mistake; one lost or scrapped keeps its record through Status."""
+
+    def get_sample(self, pk):
+        return get_object_or_404(GoldenSample.objects.select_related("product_process__product"), pk=pk)
+
+    def get(self, request, pk):
+        sample = self.get_sample(pk)
+        return render(request, "systems/confirm_delete.html", {
+            "object": sample, "kind": "Golden sample",
+            "summary": {"removed": [], "released": []},
+            "cancel_url": page_url("process", sample.product_process_id),
+        })
+
+    def post(self, request, pk):
+        sample = self.get_sample(pk)
+        label, target = str(sample), page_url("process", sample.product_process_id)
+        sample.delete()
+        messages.success(request, f"Deleted golden sample {label}.")
+        return redirect(target)
 
 
 # ------------------------------------------------------------------ one-click delete
