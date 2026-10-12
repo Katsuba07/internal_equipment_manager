@@ -28,6 +28,12 @@ if (-not (Test-Path $python)) {
     exit 1
 }
 
+# With no -Destination, use EMA_BACKUP_DIR from .env, so the nightly task
+# needs no arguments and the folder is set in one place.
+if ([string]::IsNullOrWhiteSpace($Destination) -and (Test-Path ".env")) {
+    $line = Get-Content ".env" | Where-Object { $_ -match '^\s*EMA_BACKUP_DIR\s*=' } | Select-Object -Last 1
+    if ($line) { $Destination = ($line -split "=", 2)[1].Trim().Trim('"') }
+}
 if ([string]::IsNullOrWhiteSpace($Destination)) {
     $Destination = Join-Path (Split-Path -Parent $root) "EMA-Backup"
     Write-Host "No destination given, using: $Destination" -ForegroundColor Yellow

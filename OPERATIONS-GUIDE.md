@@ -181,6 +181,13 @@ part of the code and are never touched. Git must be installed on the server
 .\scripts\backup.ps1 -Destination "\\fileserver\Backup\EMA"
 ```
 
+Or set the folder once in `.env` and leave `-Destination` out, here and in the
+scheduled task below:
+
+```
+EMA_BACKUP_DIR=\\fileserver\Backup\EMA
+```
+
 It writes a consistent copy of the database, zips the attachments, **opens the copy to confirm it is readable**, then deletes anything older than the retention limit (30 by default).
 
 ### Schedule it nightly
