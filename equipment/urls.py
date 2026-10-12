@@ -17,6 +17,7 @@ urlpatterns = [
     path("<int:pk>/", views.EquipmentDetailView.as_view(), name="detail"),
     path("<int:pk>/label/", views.EquipmentLabelView.as_view(), name="label"),
     path("<int:pk>/label/print/", views.EquipmentLabelPrintView.as_view(), name="label_print"),
+    path("<int:pk>/label/zpl/", views.EquipmentLabelZplView.as_view(), name="label_zpl"),
     path("<int:pk>/preview/", views.EquipmentPreviewView.as_view(), name="preview"),
     path("<int:pk>/edit/", views.EquipmentUpdateView.as_view(), name="update"),
     path("<int:pk>/delete/", views.EquipmentDeleteView.as_view(), name="delete"),

@@ -50,7 +50,7 @@
       /* Exactly one page: nothing may be taller than the label itself, or
          the printer feeds a second, empty label. */
       html, body { height: var(--h); overflow: hidden; background: #fff; }
-      .sheet { margin: 0; justify-content: flex-start; }
+      .sheet { margin: 0; justify-content: flex-start; zoom: 1 !important; }
       .label { height: calc(var(--h) - 0.4mm); page-break-inside: avoid; }
       .bar { display: none; }
     }
@@ -86,17 +86,16 @@
       <label>down <input type="number" id="size-dy" min="-20" max="20" step="0.5"> mm</label>
       <label>Text size <input type="number" id="size-font" min="1" max="8" step="0.1" placeholder="auto"> mm</label>
     </div>
-    {% if user.can_record %}
+    <button type="button" id="local-print" data-url="{% url 'equipment:label_zpl' equipment.pk %}">Print label</button>
+    {% if printer and user.can_record %}
     {% csrf_token %}
-    <button type="button" id="zebra-print" data-url="{% url 'equipment:label_print' equipment.pk %}">Print label</button>
+    <button type="button" id="zebra-print" data-url="{% url 'equipment:label_print' equipment.pk %}">Print on {{ printer }}</button>
     {% endif %}
     <button type="button" onclick="window.print()">Print from the browser</button>
     <div class="hint" id="print-result" role="status"></div>
-    {% if user.can_record %}
-    <div class="hint">"Print label" sends the label straight to {{ printer }}, at the size entered above; the size is remembered on this computer.</div>
-    {% else %}
-    <div class="hint">Printing on the label printer needs a Technician account or above.</div>
-    {% endif %}
+    <div class="hint">The label above is shown enlarged; it prints at the size entered.</div>
+    <div class="hint">"Print label" sends the label to the Zebra printer connected to this computer, through Zebra Browser Print
+      (install it once on each computer with a label printer). The size above is remembered on this computer.</div>
     <div class="hint">If the print sits off the label, use the two shift boxes (negative moves it left or up).</div>
     {% if not equipment.equipment_no %}<div class="hint">This asset has no Equipment No yet, so that line prints empty.</div>{% endif %}
     {% if equipment.zt_code_pending %}<div class="hint">The ZT Code is still a retired CTV2020… ID; the QR code points to it.</div>{% endif %}
@@ -124,7 +123,13 @@
         var width = size.w * size.cols + size.gap * (size.cols - 1);
         document.getElementById("page-size").textContent =
           "@page { size: " + width + "mm " + size.h + "mm; margin: 0; }";
+        // On screen the label is enlarged so it can be read: three times its
+        // real size, or less when the window is too narrow for that. Printing
+        // from the browser still uses the real size.
+        var realWidth = width * 96 / 25.4;
+        sheet.style.zoom = Math.max(1, Math.min(3, (window.innerWidth - 48) / realWidth)).toFixed(2);
       }
+      window.addEventListener("resize", apply);
 
       Object.keys(inputs).forEach(function (name) {
         var input = document.getElementById(inputs[name]);
@@ -141,9 +146,49 @@
       });
       apply();
 
-      // Straight to the Zebra printer: the server writes the label in ZPL.
-      var button = document.getElementById("zebra-print");
       var result = document.getElementById("print-result");
+
+      // On the Zebra printer connected to this computer. The server writes the
+      // label in ZPL; Zebra Browser Print, a small Zebra program running on
+      // this computer, hands it to the printer. It asks once to trust this site.
+      var BROWSER_PRINT = "http://127.0.0.1:9100";
+      var local = document.getElementById("local-print");
+      local.addEventListener("click", function () {
+        local.disabled = true;
+        result.textContent = "Printing…";
+        var zpl;
+        fetch(local.dataset.url + "?" + new URLSearchParams(size))
+          .then(function (response) {
+            if (!response.ok) throw new Error("server");
+            return response.text();
+          })
+          .then(function (text) {
+            zpl = text;
+            return fetch(BROWSER_PRINT + "/default?type=printer").catch(function () { throw new Error("agent"); });
+          })
+          .then(function (response) { return response.text(); })
+          .then(function (text) {
+            if (!text) throw new Error("printer");
+            return fetch(BROWSER_PRINT + "/write", {
+              method: "POST", body: JSON.stringify({ device: JSON.parse(text), data: zpl }),
+            });
+          })
+          .then(function (response) {
+            if (!response.ok) throw new Error("write");
+            result.textContent = "Sent to the label printer.";
+          })
+          .catch(function (error) {
+            result.textContent = {
+              server: "The app could not prepare the label. Reload the page and try again.",
+              agent: "Zebra Browser Print is not running on this computer. Install it (zebra.com, search \"Browser Print\") or start it, then try again.",
+              printer: "Zebra Browser Print has no default printer. Open it from the taskbar and choose the label printer.",
+            }[error.message] || "The printer did not take the label. Check that it is on and has labels.";
+          })
+          .then(function () { local.disabled = false; });
+      });
+
+      // On the printer connected to the server, when one is configured.
+      var button = document.getElementById("zebra-print");
       if (!button) return;
       button.addEventListener("click", function () {
         var body = new URLSearchParams(size);

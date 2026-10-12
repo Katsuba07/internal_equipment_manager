@@ -209,6 +209,16 @@ class EquipmentLabelView(LoginRequiredMixin, DetailView):
         return context
 
 
+class EquipmentLabelZplView(LoginRequiredMixin, View):
+    """The asset's label in ZPL, for the page to pass to a printer on the user's own computer."""
+
+    def get(self, request, pk):
+        equipment = get_object_or_404(Equipment, pk=pk)
+        return HttpResponse(
+            build_zpl(equipment, LabelSize.from_values(request.GET)), content_type="text/plain; charset=utf-8"
+        )
+
+
 class EquipmentLabelPrintView(CanRecordMixin, View):
     """Send the asset's label straight to the Zebra printer, as ZPL."""
 

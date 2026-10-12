@@ -340,6 +340,23 @@ class ZtCodeAndLabelTests(TestCase):
         self.assertIn("^A0N,29,29^FDEQ No:", automatic)
         self.assertIn("^A0N,24,24^FDEQ No:", small)     # 2 mm at 300 dpi
 
+    def test_label_zpl_is_served_for_a_printer_on_the_users_computer(self):
+        response = self.client.get(
+            reverse("equipment:label_zpl", args=[self.dmm.pk]) + "?w=45&h=25&cols=1&font=2"
+        )
+        body = response.content.decode()
+        self.assertTrue(body.startswith("^XA"))
+        self.assertIn("^PW531", body)
+        self.assertIn("KEYSIGHT 34461A", body)
+
+    def test_label_page_offers_the_server_printer_only_when_one_is_set(self):
+        url = reverse("equipment:label", args=[self.dmm.pk])
+        self.client.login(username="tech", password=PASSWORD)
+        self.assertNotContains(self.client.get(url), 'id="zebra-print"')
+        with self.settings(EMA_LABEL_PRINTER="ZDesigner ZT510-300dpi ZPL"):
+            self.assertContains(self.client.get(url), 'id="zebra-print"')
+        self.assertContains(self.client.get(url), 'id="local-print"')
+
     def test_print_label_sends_the_posted_size_to_the_printer(self):
         from unittest import mock
 

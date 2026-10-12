@@ -187,10 +187,12 @@ EMA_LABEL_SIZE = {
     "cols": int(os.getenv("EMA_LABEL_COLUMNS", "2")),
     "gap": float(os.getenv("EMA_LABEL_GAP_MM", "0")),
 }
-# The Zebra label printer: its name in Windows on the computer running the
-# app, or host:port (port 9100) for one on the network. EMA_LABEL_DPI is the
-# print head's resolution: 203, 300 or 600.
-EMA_LABEL_PRINTER = os.getenv("EMA_LABEL_PRINTER", "ZDesigner ZT510-300dpi ZPL")
+# Labels normally print on the Zebra printer connected to the user's own
+# computer (through Zebra Browser Print). EMA_LABEL_PRINTER adds a button that
+# prints on a printer the server itself can reach: its name in Windows on the
+# server, or host:port (port 9100) for one on the network. Empty: no such
+# button. EMA_LABEL_DPI is the print head's resolution: 203, 300 or 600.
+EMA_LABEL_PRINTER = os.getenv("EMA_LABEL_PRINTER", "")
 EMA_LABEL_DPI = int(os.getenv("EMA_LABEL_DPI", "300"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = EMA_MAX_UPLOAD_MB * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
