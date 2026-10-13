@@ -1276,6 +1276,10 @@ td.cell-danger { background: var(--danger-soft) !important; color: var(--danger)
   border-bottom: 1px solid var(--border); color: var(--accent-text); text-decoration: none;
 }
 .flow-head:hover { background: var(--surface-hover); text-decoration: none; }
+/* Golden samples missing or out of date: the process is marked like a set
+   with an overdue calibration. */
+.flow-head.bad { color: var(--danger); box-shadow: inset 0 2px 0 0 var(--danger); }
+.flow-golden { display: block; font-size: 0.75rem; font-weight: 600; letter-spacing: 0; color: var(--danger); }
 .flow-sets { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.3rem; align-items: flex-start; }
 .flow-set {
   display: flex; flex-direction: column; min-width: 7rem;
@@ -1327,7 +1331,6 @@ td.cell-danger { background: var(--danger-soft) !important; color: var(--danger)
 .line-golden .line-issues-head .subtle { font-weight: 400; }
 .golden { border-top: 1px solid var(--border); }
 .golden-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem; padding: 0.35rem 0.6rem; }
-.golden-warn { color: var(--warning); }
 .line-issue {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; padding: 0.1rem 0;
   color: var(--text); text-decoration: none; font-size: 0.88rem;
@@ -1651,6 +1654,7 @@ tr.row-ticked > td { background: var(--danger-soft); }
   color: var(--text); text-decoration: none; font-family: var(--font-mono);
 }
 .prod-chip:hover { border-color: var(--accent); color: var(--accent); }
+.prod-chip-bad { border-color: var(--danger); color: var(--danger); font-weight: 600; }
 .prod-docs { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
 
 /* ---------- A product's documents in tabs ---------- */

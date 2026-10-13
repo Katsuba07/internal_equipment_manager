@@ -3,7 +3,9 @@
 from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.urls import reverse
+from django.utils import timezone
 
+from calibration.models import add_months
 from core.forms import DateInput, PhotosField, offer_photo_removal, photos_to_remove_field, retire_field
 from core.models import Category, Customer, Location, Product
 from equipment.models import Equipment
@@ -177,24 +179,38 @@ class SetLineForm(forms.ModelForm):
 class GoldenSampleForm(forms.ModelForm):
     """One reference board of a process. The process is set by the view."""
 
-    photos = PhotosField()
     remove_photos = photos_to_remove_field()
+    photos = PhotosField()
 
     class Meta:
         model = GoldenSample
-        fields = ["code", "kind", "expected_defect", "storage_location", "valid_until", "status", "notes"]
+        fields = [
+            "code", "kind", "expected_defect", "storage_location",
+            "valid_from", "interval_months", "valid_until", "status", "notes",
+        ]
         widgets = {
-            "code": forms.TextInput(attrs={"placeholder": "e.g. GS-OK-01 or the board serial"}),
-            "expected_defect": forms.TextInput(attrs={"placeholder": "e.g. R12 open, must fail step 14"}),
-            "storage_location": forms.TextInput(attrs={"placeholder": "e.g. ESD cabinet 2, shelf B"}),
-            "valid_until": DateInput(),
+            # Only an NG sample has a defect to name (see [data-shown-when] in app.js).
+            "expected_defect": forms.TextInput(attrs={"data-shown-when": "id_kind=NG"}),
+            "valid_from": DateInput(),
+            # Refilled as the start date or the interval changes; can be typed over.
+            "valid_until": DateInput(attrs={
+                "data-next-from": "id_valid_from", "data-interval": "id_interval_months", "data-unit": "months",
+            }),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
     def __init__(self, *args, product_process=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.product_process = product_process or self.instance.product_process
+        if not self.instance.pk:
+            self.fields["valid_from"].initial = timezone.localdate
+        self.fields["interval_months"].widget.attrs["min"] = 1
+        # The labels say enough; this form carries no hints under its fields.
+        for field in self.fields.values():
+            field.help_text = ""
         offer_photo_removal(self)
+        if not self.fields["remove_photos"].choices:
+            del self.fields["remove_photos"]
 
     def clean_code(self):
         code = self.cleaned_data["code"].strip().upper()
@@ -209,6 +225,15 @@ class GoldenSampleForm(forms.ModelForm):
         data = super().clean()
         if data.get("kind") == GoldenKind.NG and not data.get("expected_defect"):
             self.add_error("expected_defect", "Say what an NG sample must fail on.")
+        if data.get("kind") == GoldenKind.OK:
+            data["expected_defect"] = ""
+        start, months, until = data.get("valid_from"), data.get("interval_months"), data.get("valid_until")
+        if months and not start:
+            self.add_error("valid_from", "Give the date the interval starts from.")
+        if start and months and not until:
+            data["valid_until"] = add_months(start, months)
+        elif start and until and until < start:
+            self.add_error("valid_until", "This is before the date the sample is applied from.")
         return data
 
 

@@ -71,8 +71,8 @@
         {% if product.name %}<span class="subtle prod-line-name">{{ product.name }}</span>{% endif %}
         <span class="spacer"></span>
         {% for s in row.steps %}
-        <a href="?process={{ s.step.pk }}" class="prod-chip" title="{{ s.step.process.name }} · {{ s.sets|length }} set{{ s.sets|length|pluralize }}"
-           hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}" data-select>{{ s.step.process.code }}{% if s.golden.has_warning %} <i class="bi bi-award golden-warn" title="Golden samples: {{ s.golden.warnings|join:'; ' }}"></i>{% endif %}</a>
+        <a href="?process={{ s.step.pk }}" class="prod-chip{% if s.golden.has_warning %} prod-chip-bad{% endif %}" title="{{ s.step.process.name }} · {{ s.sets|length }} set{{ s.sets|length|pluralize }}{% if s.golden.has_warning %} · Golden samples: {{ s.golden.warnings|join:'; ' }}{% endif %}"
+           hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}" data-select>{{ s.step.process.code }}{% if s.golden.has_warning %} <i class="bi bi-award"></i>{% endif %}</a>
         {% endfor %}
         {% if product.doc_count %}<span class="prod-docs" title="{{ product.doc_count }} document{{ product.doc_count|pluralize }}"><i class="bi bi-file-earmark-text"></i> {{ product.doc_count }}</span>{% endif %}
       </div>
@@ -86,10 +86,11 @@
         <div class="flow"{% if user.can_manage %} data-reorder-url="{% url 'systems:process_reorder' product.pk %}"{% endif %}>
           {% for s in row.steps %}
           <div class="flow-step" data-step-id="{{ s.step.pk }}"{% if user.can_manage %} draggable="true"{% endif %}>
-            <a href="?process={{ s.step.pk }}" class="flow-head{% if selected.process == s.step.pk|stringformat:'d' %} sel{% endif %}" draggable="false"
+            <a href="?process={{ s.step.pk }}" class="flow-head{% if selected.process == s.step.pk|stringformat:'d' %} sel{% endif %}{% if s.golden.has_warning %} bad{% endif %}" draggable="false"
                title="{{ s.step.process.name }} — click to edit its roles{% if user.can_manage %}, drag to reorder{% endif %}"
                hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}" data-select>
-              {{ s.step.process.code }}{% if s.golden.has_warning %} <i class="bi bi-award golden-warn" title="Golden samples: {{ s.golden.warnings|join:'; ' }}"></i>{% endif %}
+              {{ s.step.process.code }}{% if s.golden.has_warning %} <i class="bi bi-award"></i>{% endif %}
+              {% for warning in s.golden.warnings %}<span class="flow-golden">Golden: {{ warning }}</span>{% endfor %}
             </a>
             <div class="flow-sets">
               {% for x in s.sets %}

@@ -476,6 +476,7 @@
     if (!box.open) box.showModal();
     syncIssueTarget(box);
     syncNeeds(box);
+    syncShown(box);
     var first = box.querySelector("input:not([type=hidden]), select, textarea");
     if (first) first.focus();
   }
@@ -786,6 +787,33 @@
       }
     });
   });
+
+  /* ---------- Fields shown only for one choice of another field ---------- */
+  // <input data-shown-when="id_kind=NG"> is on the form only while the field
+  // with that id holds that value; hidden, it is not sent either.
+
+  function syncShown(scope) {
+    (scope || document).querySelectorAll("[data-shown-when]").forEach(function (field) {
+      var rule = field.getAttribute("data-shown-when").split("=");
+      var other = (field.form || document).querySelector("#" + rule[0]);
+      if (!other) return;
+      var shown = other.value === rule[1];
+      field.disabled = !shown;
+      var wrap = field.closest(".mb-3") || field.parentElement;
+      if (wrap) wrap.hidden = !shown;
+    });
+  }
+
+  document.addEventListener("change", function (event) {
+    if (event.target.id && document.querySelector('[data-shown-when^="' + event.target.id + '="]')) {
+      syncShown(event.target.form || document);
+    }
+  });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { syncShown(document); });
+  } else {
+    syncShown(document);
+  }
 
   /* ---------- Fields that open only when a tick says so ---------- */
   // <input data-needs="id_maintenance_required"> is shut until that box is

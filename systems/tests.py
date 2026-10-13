@@ -510,8 +510,12 @@ class GoldenSampleTests(Fixture, TestCase):
         self.assertEqual((status.ok_usable, status.ng_usable), (1, 1))
         self.assertEqual(status.warnings, ["GS-OK-01 expires in 9 days"])
 
-    def test_a_process_that_requires_nothing_never_warns(self):
+    def test_a_new_process_expects_one_ok_sample_until_set_to_zero(self):
         other = self.make_step(product=self.baf0850)
+        self.assertEqual((other.golden_ok_required, other.golden_ng_required), (1, 0))
+        self.assertEqual(other.golden_status().warnings, ["1 OK sample missing"])
+        other.golden_ok_required = 0
+        other.save()
         self.assertFalse(other.golden_status().has_warning)
 
     def test_a_golden_warning_does_not_change_set_readiness(self):
@@ -545,6 +549,54 @@ class GoldenSampleTests(Fixture, TestCase):
         self.assertContains(response, "already has a sample")
         self.assertEqual(self.step.golden_samples.count(), 1)
 
+    def test_valid_until_follows_the_start_date_and_the_interval(self):
+        self.login(Role.MANAGER)
+        url = reverse("systems:golden_create", args=[self.step.pk])
+        self.client.post(url, {
+            "code": "GS-OK-01", "kind": "OK", "status": "ACTIVE",
+            "valid_from": "2026-01-31", "interval_months": "1",
+        })
+        sample = self.step.golden_samples.get()
+        self.assertEqual(str(sample.valid_until), "2026-02-28")      # month end, not 3 March
+
+        # A date typed by hand is kept; an interval with no start date is refused.
+        self.client.post(reverse("systems:golden_edit", args=[sample.pk]), {
+            "code": "GS-OK-01", "kind": "OK", "status": "ACTIVE",
+            "valid_from": "2026-01-31", "interval_months": "1", "valid_until": "2026-03-15",
+        })
+        sample.refresh_from_db()
+        self.assertEqual(str(sample.valid_until), "2026-03-15")
+        response = self.client.post(url, {
+            "code": "GS-OK-02", "kind": "OK", "status": "ACTIVE", "interval_months": "6",
+        })
+        self.assertContains(response, "the interval starts from")
+
+    def test_expected_defect_is_for_ng_samples_only(self):
+        self.login(Role.MANAGER)
+        url = reverse("systems:golden_create", args=[self.step.pk])
+        self.assertContains(self.client.get(url), 'data-shown-when="id_kind=NG"')
+        self.client.post(url, {
+            "code": "GS-OK-01", "kind": "OK", "status": "ACTIVE", "expected_defect": "left over",
+        })
+        self.assertEqual(self.step.golden_samples.get().expected_defect, "")
+
+    def test_edit_form_shows_photos_as_thumbnails_not_bare_tick_boxes(self):
+        from core.models import Attachment, AttachmentKind
+        from django.contrib.contenttypes.models import ContentType
+
+        self.login(Role.MANAGER)
+        sample = self.sample("GS-OK-01")
+        url = reverse("systems:golden_edit", args=[sample.pk])
+        self.assertNotContains(self.client.get(url), 'name="remove_photos"')     # nothing to remove yet
+        photo = Attachment.objects.create(
+            content_type=ContentType.objects.get_for_model(GoldenSample), object_id=sample.pk,
+            kind=AttachmentKind.PHOTO, file="2026/10/golden.jpg",
+        )
+        body = self.client.get(url).content.decode()
+        self.assertIn(f'<input type="checkbox" name="remove_photos" value="{photo.pk}">', body)
+        self.assertIn('class="form-photo"', body)
+        self.assertIn("golden.jpg", body)
+
     def test_manager_edits_but_only_admin_deletes(self):
         sample = self.sample("GS-OK-01")
         self.login(Role.MANAGER)
@@ -573,7 +625,7 @@ class GoldenSampleTests(Fixture, TestCase):
         panel = self.client.get(reverse("systems:products"), {"process": self.step.pk})
         self.assertContains(panel, "Golden samples")
         self.assertContains(panel, "1 OK sample missing")
-        self.assertContains(panel, "golden-warn")                 # the icon on the list
+        self.assertContains(panel, "Golden: 1 OK sample missing")  # marked on the list itself
         overview = self.client.get(reverse("dashboard"))
         self.assertContains(overview, "Golden samples to check")
         self.assertContains(overview, "1 NG sample missing")

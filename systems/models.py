@@ -113,9 +113,10 @@ class ProductProcess(TimeStampedModel):
     )
     position = models.PositiveIntegerField("Order", default=0)
     notes = models.CharField("Notes", max_length=255, blank=True)
-    # How many usable golden samples this process should hold. Zero means the
-    # process declares nothing, so it never warns.
-    golden_ok_required = models.PositiveSmallIntegerField("OK samples required", default=0)
+    # How many usable golden samples this process should hold. Every process
+    # is expected to keep one known-good sample; set to zero, it declares
+    # nothing and never warns.
+    golden_ok_required = models.PositiveSmallIntegerField("OK samples required", default=1)
     golden_ng_required = models.PositiveSmallIntegerField("NG samples required", default=0)
 
     class Meta:
@@ -461,8 +462,14 @@ class GoldenSample(AttachmentMixin, TimeStampedModel):
         help_text="For an NG sample: what the station must fail it on.",
     )
     storage_location = models.CharField("Kept at", max_length=120, blank=True)
+    valid_from = models.DateField("Applied from", null=True, blank=True)
+    interval_months = models.PositiveIntegerField(
+        "Valid for (months)", null=True, blank=True,
+        help_text="How long the sample may be used before it is checked or replaced.",
+    )
     valid_until = models.DateField(
-        "Valid until", null=True, blank=True, help_text="Leave empty if it does not expire.",
+        "Valid until", null=True, blank=True,
+        help_text="Filled in from the two fields above; leave all three empty if it does not expire.",
     )
     status = models.CharField(
         "Status", max_length=10, choices=GoldenStatus.choices, default=GoldenStatus.ACTIVE,
@@ -486,6 +493,15 @@ class GoldenSample(AttachmentMixin, TimeStampedModel):
         from django.urls import reverse
 
         return f"{reverse('systems:products')}?process={self.product_process_id}"
+
+    def save(self, *args, **kwargs):
+        # The form fills "Valid until" as the two fields are typed; this covers
+        # a sample saved without it (an import, the admin, a script).
+        if not self.valid_until and self.valid_from and self.interval_months:
+            from calibration.models import add_months
+
+            self.valid_until = add_months(self.valid_from, self.interval_months)
+        super().save(*args, **kwargs)
 
     @property
     def days_left(self) -> int | None:

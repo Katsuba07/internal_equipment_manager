@@ -2,6 +2,7 @@
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.utils.html import format_html, format_html_join
 
 
 class DateInput(forms.DateInput):
@@ -93,11 +94,42 @@ class PhotosField(forms.FileField):
         return cleaned
 
 
+class PhotoRemovalWidget(forms.SelectMultiple):
+    """
+    The record's photos as thumbnails, each with an × that marks it for removal.
+
+    The same markup the equipment and spare part forms write by hand, for
+    forms that are rendered whole (``{{ form|crispy }}``).
+    """
+
+    photos = ()
+
+    def render(self, name, value, attrs=None, renderer=None):
+        chosen = {str(item) for item in (value or [])}
+        return format_html(
+            '<div class="form-photos">{}</div>',
+            format_html_join(
+                "",
+                '<label class="form-photo" title="tick × to delete on save">'
+                '<input type="checkbox" name="{}" value="{}"{}>'
+                '<img src="{}" alt="">'
+                '<span class="form-photo-x" aria-label="Delete this photo"><i class="bi bi-x-lg"></i></span>'
+                '<span class="form-photo-gone">Deleted on save</span></label>',
+                (
+                    (name, photo.pk, " checked" if str(photo.pk) in chosen else "",
+                     (photo.thumbnail or photo.file).url)
+                    for photo in self.photos
+                ),
+            ),
+        )
+
+
 def photos_to_remove_field() -> forms.MultipleChoiceField:
-    """Tick boxes over the photos already on the record; ticked ones go on save."""
-    return forms.MultipleChoiceField(required=False, label="", widget=forms.CheckboxSelectMultiple)
+    """The photos already on the record, to tick for removal; ticked ones go on save."""
+    return forms.MultipleChoiceField(required=False, label="Photos", widget=PhotoRemovalWidget)
 
 
 def offer_photo_removal(form, field: str = "remove_photos", attr: str = "photos") -> None:
-    photos = getattr(form.instance, attr) if form.instance.pk else []
+    photos = list(getattr(form.instance, attr)) if form.instance.pk else []
     form.fields[field].choices = [(str(photo.pk), str(photo.pk)) for photo in photos]
+    form.fields[field].widget.photos = photos
