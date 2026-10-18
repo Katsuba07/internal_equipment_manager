@@ -32,7 +32,7 @@ class ActivityTests(BaseFixtureMixin, TestCase):
         self.assertIsNone(deleted["url"])                                    # nothing to open
 
     def test_a_status_change_is_not_shown_twice(self):
-        self.equipment.change_status(EquipmentStatus.REPAIR, self.users[Role.TECHNICIAN], "broken pin")
+        self.equipment.change_status(EquipmentStatus.BROKEN, self.users[Role.TECHNICIAN], "broken pin")
         tags = [tag for code, tag in self.tags() if code == "ICT-FIX-001"]
         self.assertNotIn("Edited", tags)
         self.assertEqual(len(tags), 2)                                       # added + the status change

@@ -17,9 +17,9 @@ class ScheduleDateTests(BaseFixtureMixin, TestCase):
 
     def data(self, **fields):
         base = {
-            "code": self.equipment.code, "name": self.equipment.name,
+            "code": self.equipment.code, "equipment_no": self.equipment.code, "name": self.equipment.name,
             "category": self.category.pk, "location": self.location.pk,
-            "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
+            "plant": "CTV2", "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
             "parts-MIN_NUM_FORMS": "0", "parts-MAX_NUM_FORMS": "1000",
         }
         base.update(fields)
@@ -43,6 +43,14 @@ class ScheduleDateTests(BaseFixtureMixin, TestCase):
                   calibration_last="2026-08-31", calibration_next="")
         plan = CalibrationPlan.objects.get(equipment=self.equipment)
         self.assertEqual(plan.next_due_at, date(2027, 2, 28))      # month end kept sensible
+
+    def test_no_dates_given_means_no_due_date_not_a_year_from_today(self):
+        self.save(is_measuring_device="on", calibration_interval_months="12",
+                  calibration_last="", calibration_next="", calibration_confirmed="on")
+        plan = CalibrationPlan.objects.get(equipment=self.equipment)
+        self.assertIsNone(plan.next_due_at)
+        self.equipment.refresh_from_db()
+        self.assertTrue(self.equipment.calibration_date_unknown)
 
     def test_maintenance_dates_are_saved(self):
         self.save(maintenance_required="on", maintenance_interval_days="90",

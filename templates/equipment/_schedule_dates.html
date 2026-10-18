@@ -1,0 +1,25 @@
+{% comment %}Last and due dates of an asset's calibration (kind="calibration") or maintenance, with where it stands. Used on the detail page and in the preview.{% endcomment %}
+{% if kind == "calibration" %}
+  {% with plan=equipment.calibration_now %}
+  {% if equipment.calibration_date_unknown %}
+    <span class="badge badge-danger" title="Do not measure with it until it is calibrated">Date unknown</span>
+    <span class="sched-dates">Last <b>Unknown</b> · Due <b>Unknown</b></span>
+  {% elif plan %}
+    <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
+    <span class="sched-dates">Last <b>{{ plan.last_calibrated_at|date:"d M Y"|default:"—" }}</b> · Due <b>{{ plan.next_due_at|date:"d M Y"|default:"—" }}</b>{% if plan.interval_months %} · every {{ plan.interval_months }} month{{ plan.interval_months|pluralize }}{% endif %}</span>
+  {% else %}
+    <span class="subtle">Not required</span>
+  {% endif %}
+  {% endwith %}
+{% else %}
+  {% with plan=equipment.maintenance_now %}
+  {% if plan %}
+    <span class="badge {{ plan.due_badge_class }}">{{ plan.due_display }}</span>
+    <span class="sched-dates">Last <b>{{ plan.last_done_at|date:"d M Y"|default:"—" }}</b> · Due <b>{{ plan.next_due_at|date:"d M Y"|default:"—" }}</b>{% if plan.interval_days %} · every {{ plan.interval_days }} days{% endif %}</span>
+  {% elif equipment.maintenance_required %}
+    <span class="subtle">No dates yet</span>
+  {% else %}
+    <span class="subtle">Not required</span>
+  {% endif %}
+  {% endwith %}
+{% endif %}

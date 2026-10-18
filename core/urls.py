@@ -3,8 +3,9 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
+from .login_guard import GuardedAuthenticationForm
 from .models import AttachmentKind
-from .photos import PhotoDeleteView, PhotoPrimaryView, PhotoUploadView, serve_upload
+from .photos import PhotoDeleteView, PhotoPrimaryView, PhotoStageView, PhotoUploadView, serve_upload
 from .quickadd import QuickAddView
 from .views import ActivityView, DashboardView
 
@@ -12,6 +13,8 @@ urlpatterns = [
     path("", DashboardView.as_view(), name="dashboard"),
     path("activity/", ActivityView.as_view(), name="activity"),
     path("quick-add/<str:kind>/", QuickAddView.as_view(), name="quick_add"),
+    path("photos/staged/", PhotoStageView.as_view(), name="photo_stage"),
+    path("photos/staged/<str:token>/", PhotoStageView.as_view(), name="photo_staged"),
     path("photos/<str:app_label>/<str:model>/<int:pk>/", PhotoUploadView.as_view(), name="photo_upload"),
     path(
         "nameplate/<str:app_label>/<str:model>/<int:pk>/",
@@ -25,7 +28,8 @@ urlpatterns = [
     path(
         "login/",
         auth_views.LoginView.as_view(
-            template_name="registration/login.html", redirect_authenticated_user=True
+            template_name="registration/login.html", redirect_authenticated_user=True,
+            authentication_form=GuardedAuthenticationForm,
         ),
         name="login",
     ),

@@ -1,0 +1,34 @@
+<div class="pv-head">
+  <div class="pv-title">
+    <span class="mono fw-600">{{ station }}</span>
+    <span class="badge badge-neutral">{{ station.process.code }}</span>
+  </div>
+  <button type="button" class="btn btn-ghost btn-icon btn-sm" data-preview-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+</div>
+<div class="pv-sub">{% if station.customer %}{{ station.customer.name }} · {% endif %}{{ station.process.name }}{% if station.line %} · {{ station.line.name }}{% endif %}{% if station.notes %} · {{ station.notes }}{% endif %}</div>
+
+<div class="pv-actions">
+  <a href="{% url 'systems:station_detail' station.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-up-right"></i> Open</a>
+  {% if user.can_manage %}<a href="{% url 'systems:station_edit' station.pk %}" class="btn btn-default btn-sm" data-modal-form="{% url 'systems:station_edit' station.pk %}"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
+</div>
+
+<div class="pv-section">On the station now <span class="subtle">({{ on_station_count }})</span></div>
+{% if running %}<div class="small mb-1"><span class="running-tag"><i class="bi bi-play-circle-fill"></i> Running <span class="mono fw-600">{{ running.set.product.code }}</span></span>{% if station.running_since %} <span class="subtle">since {{ station.running_since|date:"d M Y H:i" }}</span>{% endif %}</div>
+{% elif models %}<div class="small mb-1"><span class="badge badge-warning">No model running</span></div>{% endif %}
+<div class="machines">
+  {% for card in mounted %}{% include "systems/_machine.html" with compact=True %}{% endfor %}
+  {% for card in held %}{% include "systems/_machine.html" with compact=True %}{% endfor %}
+  {% if not held and not mounted %}<div class="small subtle">None yet.</div>{% endif %}
+</div>
+
+<div class="pv-section">Models <span class="subtle">({{ models|length }})</span></div>
+<div class="machines">
+  {% for row in models %}
+  <div class="pv-model">
+    <span class="dot {{ row.readiness.dot_class }}"></span>
+    <a class="mono fw-600" href="{% url 'systems:products' %}?set={{ row.set.pk }}">{{ row.set.product.code }}</a>
+    <span class="subtle small">{% for line in row.own %}{{ line.equipment.ident }}{% if not forloop.last %}, {% endif %}{% empty %}no fixture yet{% endfor %}</span>
+    {% if row.running %}<span class="badge badge-success">Running</span>{% else %}<span class="badge badge-neutral">Kept aside</span>{% endif %}
+  </div>
+  {% empty %}<div class="small subtle">No model runs on it yet.</div>{% endfor %}
+</div>

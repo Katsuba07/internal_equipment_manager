@@ -1,0 +1,123 @@
+{% load crispy_forms_tags %}
+{% comment %}The station form's fields — shared by the full page and the edit dialog.{% endcomment %}
+  {% if error %}<div class="alert alert-danger"><i class="bi bi-exclamation-octagon"></i><div>{{ error }}</div></div>{% endif %}
+    <div class="card">
+      <div class="card-body station-fields">
+        {{ form.code|as_crispy_field }}
+        {{ form.customer|as_crispy_field }}
+        {{ form.process|as_crispy_field }}
+        {{ form.line|as_crispy_field }}
+        {{ form.notes|as_crispy_field }}
+      </div>
+    </div>
+    <div class="card mt-2">
+      <div class="card-head"><i class="bi bi-box-seam"></i> What each model brings</div>
+      {{ slots.management_form }}
+      {% if slots.non_form_errors %}<div class="alert alert-danger panel-alert"><i class="bi bi-exclamation-octagon"></i><div>{{ slots.non_form_errors|join:" " }}</div></div>{% endif %}
+      <div id="slots-rows" class="setup-rows">
+        {% for f in slots %}
+        <div class="setup-row" data-qa-scope>
+          {{ f.id }}
+          <div class="setup-role">
+            <div class="with-add tight grow">
+              <div class="grow">{{ f.category }}</div>
+              <button type="button" class="btn btn-default btn-icon" title="Add a new equipment type" data-quick-add="{% url 'quick_add' 'category' %}"><i class="bi bi-plus-lg"></i></button>
+            </div>
+            <label class="setup-flag" title="A model is not ready without it">{{ f.is_required }} Req.</label>
+            {% if f.instance.pk %}<label class="setup-flag setup-remove">{{ f.DELETE }} Remove</label>{% endif %}
+          </div>
+          {% if f.category.errors %}<div class="invalid-feedback d-block">{{ f.category.errors|striptags }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <template id="slots-empty">
+        {% with f=slots.empty_form %}
+        <div class="setup-row" data-qa-scope>
+          {{ f.id }}
+          <div class="setup-role">
+            <div class="with-add tight grow">
+              <div class="grow">{{ f.category }}</div>
+              <button type="button" class="btn btn-default btn-icon" title="Add a new equipment type" data-quick-add="{% url 'quick_add' 'category' %}"><i class="bi bi-plus-lg"></i></button>
+            </div>
+            <label class="setup-flag">{{ f.is_required }} Req.</label>
+          </div>
+        </div>
+        {% endwith %}
+      </template>
+      <div class="card-body"><button type="button" class="btn btn-default btn-sm" data-formset-add="slots"><i class="bi bi-plus-lg"></i> Add item</button></div>
+    </div>
+    <div class="card mt-2">
+      <div class="card-head"><i class="bi bi-hdd-stack"></i> Shared machines</div>
+      {% comment %}As many as needed: "Add machine" adds a search box, the bin takes one out (app.js, data-row-add).{% endcomment %}
+      <div class="card-body station-assets" id="station-assets">
+        {% for row in rows %}
+        <div class="station-asset">
+          <div class="grow">{% include "core/_asset_picker.html" with name="asset" chosen=row.chosen input_id=row.input_id source=source %}</div>
+          <button type="button" class="btn btn-ghost btn-icon" data-row-remove title="Remove this machine from the station" aria-label="Remove this machine from the station"><i class="bi bi-trash"></i></button>
+        </div>
+        {% endfor %}
+      </div>
+      <template id="station-assets-empty">
+        <div class="station-asset">
+          <div class="grow">{% include "core/_asset_picker.html" with name="asset" chosen=None input_id="id_asset___n__" source=source %}</div>
+          <button type="button" class="btn btn-ghost btn-icon" data-row-remove title="Remove this machine from the station" aria-label="Remove this machine from the station"><i class="bi bi-trash"></i></button>
+        </div>
+      </template>
+      <div class="card-body pt-0"><button type="button" class="btn btn-default btn-sm" data-row-add="station-assets"><i class="bi bi-plus-lg"></i> Add machine</button></div>
+    </div>
+    {% if station.pk %}
+    <div class="card mt-2">
+      <div class="card-head"><i class="bi bi-box-seam"></i> Models and their own machines <span class="subtle small">the running model's are the ones mounted</span></div>
+      {% comment %}Each model with one search box per slot. A fixture may be chosen for several models: it serves them all. "Add model" adds a row (app.js, data-row-add).{% endcomment %}
+      {% if not new_pickers %}<div class="card-body cell-muted small">List above what each model brings (for example its fixture) and save, to choose those machines here.</div>{% endif %}
+      <div class="station-models" id="station-models">
+        {% for row in model_rows %}
+        <div class="station-model{% if row.remove %} is-removing{% endif %}">
+          <div class="station-model-head">
+            <span class="mono fw-600">{{ row.set.product.code }}</span> <span class="subtle small">#{{ row.set.number }}</span>
+            <span class="spacer"></span>
+            <label class="setup-flag" title="Set up on the station now: its own machines are mounted"><input type="radio" name="running" value="{{ row.set.pk }}"{% if row.running %} checked{% endif %}> Running now</label>
+            <label class="setup-flag setup-remove" title="Take it off the station (it keeps its own machines)"><input type="checkbox" name="{{ row.prefix }}_remove"{% if row.remove %} checked{% endif %}> Remove</label>
+          </div>
+          {% for p in row.pickers %}
+          <div class="station-model-slot"><span class="station-model-slot-name">{{ p.slot.name }}</span>
+            <div class="grow">{% include "core/_asset_picker.html" with name=p.name chosen=p.chosen input_id=p.input_id source=p.source empty_text=p.empty_text %}</div></div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        {% for row in added_rows %}
+        <div class="station-model">
+          <div class="station-model-head">
+            <select name="{{ row.prefix }}_product" class="form-select" aria-label="Model to add">
+              <option value="">— choose a model —</option>
+              {% for product in addable %}<option value="{{ product.pk }}"{% if row.product == product.pk|stringformat:"s" %} selected{% endif %}>{{ product.code }}{% if product.name %} · {{ product.name }}{% endif %}</option>{% endfor %}
+            </select>
+            <label class="setup-flag"><input type="radio" name="running" value="{{ row.prefix }}"{% if row.running %} checked{% endif %}> Running now</label>
+            <button type="button" class="btn btn-ghost btn-icon" data-row-remove title="Do not add it" aria-label="Do not add it"><i class="bi bi-trash"></i></button>
+          </div>
+          {% for p in row.pickers %}
+          <div class="station-model-slot"><span class="station-model-slot-name">{{ p.slot.name }}</span>
+            <div class="grow">{% include "core/_asset_picker.html" with name=p.name chosen=p.chosen input_id=p.input_id source=p.source empty_text=p.empty_text %}</div></div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <template id="station-models-empty">
+        <div class="station-model">
+          <div class="station-model-head">
+            <select name="new___n___product" class="form-select" aria-label="Model to add">
+              <option value="">— choose a model —</option>
+              {% for product in addable %}<option value="{{ product.pk }}">{{ product.code }}{% if product.name %} · {{ product.name }}{% endif %}</option>{% endfor %}
+            </select>
+            <label class="setup-flag"><input type="radio" name="running" value="new___n__"> Running now</label>
+            <button type="button" class="btn btn-ghost btn-icon" data-row-remove title="Do not add it" aria-label="Do not add it"><i class="bi bi-trash"></i></button>
+          </div>
+          {% for p in new_pickers %}
+          <div class="station-model-slot"><span class="station-model-slot-name">{{ p.slot.name }}</span>
+            <div class="grow">{% include "core/_asset_picker.html" with name=p.name chosen=None input_id=p.input_id source=p.source empty_text=p.empty_text %}</div></div>
+          {% endfor %}
+        </div>
+      </template>
+      <div class="card-body pt-0"><button type="button" class="btn btn-default btn-sm" data-row-add="station-models"><i class="bi bi-plus-lg"></i> Add model</button></div>
+    </div>
+    {% endif %}

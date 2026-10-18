@@ -26,6 +26,8 @@ from systems.models import (
     ProcessRole,
     ProductProcess,
     SlotState,
+    Station,
+    StationSlot,
     SystemType,
     SystemTypeRole,
     TestSet,
@@ -77,41 +79,46 @@ class Fixture:
         cls.fix1 = asset("FIX-RM01", cls.fix_cat)
 
     def make_step(self, product=None, process=None):
-        step = ProductProcess.objects.create(product=product or self.rmmtt01, process=process or self.fct, position=1)
-        step.copy_template()
-        return step
+        return ProductProcess.objects.create(product=product or self.rmmtt01, process=process or self.fct, position=1)
+
+    def station_for(self, process):
+        """One station per process, asking each model for a test cart, a fixture and a DMM."""
+        station, created = Station.objects.get_or_create(code=f"{process.code}-STN", defaults={"process": process})
+        if created:
+            for position, category in enumerate([self.cart_cat, self.fix_cat, self.dmm_cat], start=1):
+                StationSlot.objects.create(station=station, category=category, position=position)
+        return station
 
     def make_set(self, step=None, number=1):
-        return TestSet.objects.create(product_process=step or self.make_step(), number=number, line=self.room)
+        step = step or self.make_step()
+        return TestSet.objects.create(
+            product_process=step, number=number, line=self.room, station=self.station_for(step.process),
+        )
 
     ROLE_TYPES = {"Test Cart": "CART", "Fixture": "FIX", "DMM": "DMM"}
 
     def role(self, test_set, label):
-        """Roles are named after their equipment type; find them by that type."""
-        return test_set.product_process.roles.get(category__code=self.ROLE_TYPES[label])
+        """The slot of the set's station for that kind of machine (the set joins a station if it has none)."""
+        if not test_set.station_id:
+            test_set.station = self.station_for(test_set.product_process.process)
+            test_set.save()
+        return test_set.station.slots.get(category__code=self.ROLE_TYPES[label])
 
     def login(self, role):
         self.client.login(username=role.lower(), password=PASSWORD)
 
+    def on_another_station(self, test_set):
+        """Move the set to a second station of the same process, with the same slots."""
+        first = self.station_for(test_set.product_process.process)
+        other, _ = Station.objects.get_or_create(code=f"{first.code}-B", process=first.process)
+        for slot in first.slots.all():
+            StationSlot.objects.get_or_create(station=other, category=slot.category, defaults={"position": slot.position})
+        test_set.station = other
+        test_set.save()
+        return test_set
+
 
 class ProcessTests(Fixture, TestCase):
-    def test_template_is_copied_into_the_product_process(self):
-        step = self.make_step()
-        roles = list(step.roles.values_list("name", "category__code"))
-        self.assertEqual(roles, [("Test cart", "CART"), ("Fixture", "FIX"), ("Digital multimeter", "DMM")])
-
-    def test_each_product_edits_its_own_role_list(self):
-        a = self.make_step()
-        b = self.make_step(product=self.baf0850)
-        b.roles.get(category=self.cart_cat).delete()
-        ProcessRole.objects.create(product_process=b, name="~x", position=9, category=self.dmm_cat)
-        b.name_roles()
-        self.assertEqual(a.roles.count(), 3)
-        self.assertEqual(
-            list(b.roles.values_list("name", flat=True)),
-            ["Fixture", "Digital multimeter 1", "Digital multimeter 2"],
-        )
-
     def test_sets_share_the_process_roles_and_number_up(self):
         step = self.make_step()
         s1 = self.make_set(step)
@@ -127,21 +134,39 @@ class FitTests(Fixture, TestCase):
         self.set2 = TestSet.objects.create(product_process=self.set1.product_process, number=2)
         self.admin = self.users[Role.ADMIN]
 
-    def test_database_rejects_one_asset_in_two_places(self):
+    def test_database_rejects_one_asset_twice_in_a_set_or_at_two_stations(self):
         Installation.fit(self.cart1, self.set1, self.role(self.set1, "Test Cart"), self.admin)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Installation.objects.create(component=self.cart1, test_set=self.set2, role=self.role(self.set2, "Test Cart"))
+            Installation.objects.create(component=self.cart1, test_set=self.set1, slot=self.role(self.set1, "DMM"))
+        Installation.place_at_station(self.dmm1, self.set1.station, self.admin)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Installation.objects.create(component=self.dmm1, station=self.on_another_station(self.set2).station)
 
     def test_database_rejects_two_assets_in_one_role(self):
         role = self.role(self.set1, "Test Cart")
         Installation.fit(self.cart1, self.set1, role, self.admin)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Installation.objects.create(component=self.cart2, test_set=self.set1, role=role)
+            Installation.objects.create(component=self.cart2, test_set=self.set1, slot=role)
 
-    def test_asset_in_another_set_is_refused_by_name(self):
+    def test_asset_in_a_set_of_another_station_is_refused_by_name(self):
         Installation.fit(self.cart1, self.set1, self.role(self.set1, "Test Cart"), self.admin)
+        self.on_another_station(self.set2)
         with self.assertRaisesMessage(ValidationError, "RMMTT01 · FCT #1"):
             Installation.fit(self.cart1, self.set2, self.role(self.set2, "Test Cart"), self.admin)
+
+    def test_one_fixture_can_serve_several_models_of_its_station(self):
+        Installation.fit(self.fix1, self.set1, self.role(self.set1, "Fixture"), self.admin)
+        Installation.fit(self.fix1, self.set2, self.role(self.set2, "Fixture"), self.admin)
+        self.assertEqual(len(self.fix1.open_fittings_now), 2)
+        self.assertIn("RMMTT01", self.fix1.where_fitted)
+        # Releasing it from one model leaves it with the other.
+        self.set1.open_installations().get(component=self.fix1).release(self.admin)
+        self.assertEqual([f.test_set for f in self.fix1.open_fittings_now], [self.set2])
+
+    def test_a_station_s_shared_machine_is_not_also_a_model_s_own(self):
+        Installation.place_at_station(self.dmm1, self.set1.station, self.admin)
+        with self.assertRaisesMessage(ValidationError, "currently fitted in station"):
+            Installation.fit(self.dmm1, self.set1, self.role(self.set1, "DMM"), self.admin)
 
     def test_wrong_kind_of_asset_is_refused(self):
         with self.assertRaisesMessage(ValidationError, "needs a Test cart"):
@@ -174,8 +199,8 @@ class FitTests(Fixture, TestCase):
         self.assertEqual(status.state, SlotState.UNUSABLE)
         self.assertIn("overdue", status.detail)
 
-    def test_down_asset_is_unusable(self):
-        self.cart1.status = EquipmentStatus.DOWN
+    def test_broken_asset_is_unusable(self):
+        self.cart1.status = EquipmentStatus.BROKEN
         self.cart1.save()
         Installation.fit(self.cart1, self.set1, self.role(self.set1, "Test Cart"), self.admin)
         status = evaluate_set(self.set1).lines[0]
@@ -191,6 +216,7 @@ class FitTests(Fixture, TestCase):
         self.assertFalse(self.set1.open_installations().exists())
 
     def test_apply_changes_can_move_an_asset_between_sets_after_removal(self):
+        self.on_another_station(self.set2)
         role1, role2 = self.role(self.set1, "DMM"), self.role(self.set2, "DMM")
         apply_set_changes(self.set1, {role1.id: self.dmm1}, self.admin)
         with self.assertRaises(ValidationError):
@@ -229,7 +255,13 @@ class DeleteTests(Fixture, TestCase):
         delete_with_release(step, self.users[Role.ADMIN])
         self.assertFalse(ProductProcess.objects.exists())
 
-    def test_deleting_a_process_type_is_not_blocked(self):
+    def test_a_process_type_with_stations_is_kept_until_they_go(self):
+        from django.db.models import ProtectedError
+
+        with self.assertRaises(ProtectedError):
+            self.fct.delete()
+        for station in Station.objects.filter(process=self.fct):
+            station.delete(user=self.users[Role.ADMIN])
         self.fct.delete()
         self.assertFalse(ProductProcess.objects.exists())
 
@@ -288,7 +320,7 @@ class PageTests(Fixture, TestCase):
         self.login(Role.ADMIN)
         urls = [
             reverse("systems:products"),
-            reverse("systems:products") + "?show=all",
+            reverse("systems:products") + "?production=yes",
             reverse("systems:products") + f"?set={self.set1.pk}",
             reverse("systems:products") + f"?product={self.rmmtt01.pk}",
             reverse("systems:products") + f"?process={self.step.pk}",
@@ -303,7 +335,6 @@ class PageTests(Fixture, TestCase):
             reverse("systems:set_panel", args=[self.set1.pk]),
             reverse("systems:product_panel", args=[self.rmmtt01.pk]),
             reverse("systems:process_panel", args=[self.step.pk]),
-            reverse("systems:set_edit", args=[self.set1.pk]),
             reverse("systems:product_edit", args=[self.rmmtt01.pk]),
             reverse("systems:product_create"),
         ]:
@@ -328,30 +359,35 @@ class PageTests(Fixture, TestCase):
         self.assertIn("PRB-1", body)
         self.assertIn("Not ready", body)
 
-    def test_technician_edits_a_set_in_one_save(self):
+    def editor_for(self, test_set):
+        self.role(test_set, "Test Cart")          # puts the set on a station if it has none
+        test_set.refresh_from_db()
+        return reverse("systems:station_model_edit", args=[test_set.station_id, test_set.pk])
+
+    def test_technician_edits_a_model_on_its_station_in_one_save(self):
+        url = self.editor_for(self.set1)
         self.login(Role.TECHNICIAN)
         fix, dmm = self.role(self.set1, "Fixture"), self.role(self.set1, "DMM")
         cart = self.role(self.set1, "Test Cart")
-        response = self.hx(reverse("systems:set_edit", args=[self.set1.pk]), "post", {
-            "line": self.room.pk, f"role_{cart.id}": self.cart2.pk,
-            f"role_{fix.id}": self.fix1.pk, f"role_{dmm.id}": self.dmm1.pk,
+        response = self.client.post(url, {
+            f"slot_{cart.id}": self.cart2.pk, f"slot_{fix.id}": self.fix1.pk, f"slot_{dmm.id}": self.dmm1.pk,
         })
-        self.assertEqual(response.status_code, 204)
-        self.assertEqual(response["HX-Redirect"], reverse("systems:products") + f"?set={self.set1.pk}")
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(
             set(self.set1.open_installations().values_list("component__code", flat=True)),
             {"CART-002", "FIX-RM01", "DMM-001"},
         )
         self.assertTrue(evaluate_set(self.set1).is_ready)
 
-    def test_set_edit_shows_why_when_refused(self):
-        other = TestSet.objects.create(product_process=self.step, number=2)
+    def test_station_editor_shows_why_when_refused(self):
+        other = self.on_another_station(TestSet.objects.create(product_process=self.step, number=2))
+        url = self.editor_for(other)
         self.login(Role.TECHNICIAN)
         cart = self.role(other, "Test Cart")
-        response = self.hx(reverse("systems:set_edit", args=[other.pk]), "post", {f"role_{cart.id}": self.cart1.pk})
+        response = self.client.post(url, {f"slot_{cart.id}": self.cart1.pk})
         self.assertContains(response, "currently fitted in RMMTT01 · FCT #1")
 
-    def test_new_product_with_processes_gets_roles_and_a_set_each(self):
+    def test_new_product_gets_its_route_and_no_sets_yet(self):
         self.login(Role.MANAGER)
         response = self.hx(reverse("systems:product_create"), "post", {
             "customer": self.baf.pk, "code": "baf1950", "name": "Mainboard", "in_production": "on",
@@ -361,7 +397,8 @@ class PageTests(Fixture, TestCase):
         product = Product.objects.get(code="BAF1950")
         self.assertTrue(product.in_production)
         self.assertEqual(list(product.processes.values_list("process__code", flat=True)), ["ICT", "FCT"])
-        self.assertEqual(TestSet.objects.filter(product_process__product=product).count(), 2)
+        # Sets come from stations ("Add model"), not from the product.
+        self.assertFalse(TestSet.objects.filter(product_process__product=product).exists())
 
     def test_manager_adds_process_reorders_toggles_and_adds_set(self):
         self.login(Role.MANAGER)
@@ -372,8 +409,6 @@ class PageTests(Fixture, TestCase):
         self.hx(reverse("systems:product_toggle", args=[self.rmmtt01.pk]), "post")
         self.rmmtt01.refresh_from_db()
         self.assertFalse(self.rmmtt01.in_production)
-        self.hx(reverse("systems:set_add", args=[self.step.pk]), "post")
-        self.assertEqual(self.step.sets.count(), 2)
 
     def test_drag_and_drop_saves_a_new_route_order(self):
         ict = ProductProcess.objects.create(product=self.rmmtt01, process=self.ict, position=2)
@@ -403,39 +438,18 @@ class PageTests(Fixture, TestCase):
         self.login(Role.MANAGER)
         self.assertIn('draggable="true"', self.client.get(reverse("systems:products")).content.decode())
 
-    def test_manager_edits_roles_as_equipment_types(self):
-        self.login(Role.MANAGER)
-        roles = list(self.step.roles.all())
-        data = {"roles-TOTAL_FORMS": "4", "roles-INITIAL_FORMS": "3", "roles-MIN_NUM_FORMS": "0", "roles-MAX_NUM_FORMS": "1000"}
-        for i, role in enumerate(roles):
-            data.update({f"roles-{i}-id": role.pk, f"roles-{i}-category": role.category_id, f"roles-{i}-is_required": "on"})
-        data["roles-2-DELETE"] = "on"                                   # drop the DMM
-        data.update({"roles-3-category": self.cart_cat.pk, "roles-3-is_required": "on"})   # a second cart
-        response = self.hx(reverse("systems:process_roles", args=[self.step.pk]), "post", data)
-        self.assertEqual(response.status_code, 204)
-        self.assertEqual(list(self.step.roles.values_list("name", flat=True)), ["Test cart 1", "Fixture", "Test cart 2"])
-
-    def test_role_without_type_is_refused(self):
-        self.login(Role.MANAGER)
-        data = {"roles-TOTAL_FORMS": "1", "roles-INITIAL_FORMS": "0", "roles-MIN_NUM_FORMS": "0",
-                "roles-MAX_NUM_FORMS": "1000", "roles-0-category": "", "roles-0-is_required": ""}
-        response = self.hx(reverse("systems:process_roles", args=[self.step.pk]), "post", data)
-        self.assertEqual(self.step.roles.count(), 3)
-        self.assertEqual(response.status_code, 200)
-
     def test_viewer_and_technician_limits(self):
         writes = [
             reverse("systems:product_toggle", args=[self.rmmtt01.pk]),
             reverse("systems:process_add", args=[self.rmmtt01.pk]),
-            reverse("systems:set_add", args=[self.step.pk]),
-            reverse("systems:process_roles", args=[self.step.pk]),
         ]
         self.login(Role.TECHNICIAN)
         for url in writes:
             with self.subTest(url=url):
                 self.assertEqual(self.client.post(url).status_code, 302)
+        editor = self.editor_for(self.set1)
         self.login(Role.VIEWER)
-        self.assertEqual(self.client.post(reverse("systems:set_edit", args=[self.set1.pk])).status_code, 302)
+        self.assertEqual(self.client.post(editor).status_code, 302)
         self.assertEqual(self.client.get(reverse("systems:product_delete", args=[self.rmmtt01.pk])).status_code, 302)
         self.assertEqual(self.set1.open_installations().count(), 1)
 
@@ -463,12 +477,12 @@ class IdleProductTests(Fixture, TestCase):
         self.assertEqual(codes, ["RMMTT01", "BAF0850"])     # live first, idle after
 
         self.login(Role.VIEWER)
-        body = self.client.get(reverse("systems:products"), {"show": "all"}).content.decode()
+        body = self.client.get(reverse("systems:products")).content.decode()
         self.assertIn("Not in production", body)
         self.assertIn('class="prod-line"', body)                          # idle ones take one line
         self.assertLess(body.index("RMMTT01"), body.index("BAF0850"))
-        self.assertIn("All products", body)
-        body = self.client.get(reverse("systems:products"), {"show": "production"}).content.decode()
+        self.assertIn("All products", body)              # the Production filter's first choice
+        body = self.client.get(reverse("systems:products"), {"production": "yes"}).content.decode()
         self.assertNotIn("BAF0850", body)
 
 
@@ -629,3 +643,20 @@ class GoldenSampleTests(Fixture, TestCase):
         overview = self.client.get(reverse("dashboard"))
         self.assertContains(overview, "Golden samples to check")
         self.assertContains(overview, "1 NG sample missing")
+
+
+class ProductionFilterTests(Fixture, TestCase):
+    def test_all_products_are_listed_and_the_filter_narrows_them(self):
+        self.login(Role.VIEWER)
+        url = reverse("systems:products")
+        page = self.client.get(url).content.decode()
+        self.assertNotIn("prod-tabs", page)
+        self.assertIn("RMMTT01", page)                              # in production
+        self.assertIn("BAF0850", page)                              # not in production, still listed
+        self.assertIn('<select name="production"', page)
+        running = self.client.get(url, {"production": "yes"}).content.decode()
+        self.assertIn("RMMTT01", running)
+        self.assertNotIn("BAF0850", running.split('id="panel"')[0])
+        idle = self.client.get(url, {"production": "no"}).content.decode()
+        self.assertIn("BAF0850", idle)
+        self.assertNotIn(">RMMTT01<", idle.split('id="panel"')[0])

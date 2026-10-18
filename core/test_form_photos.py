@@ -25,9 +25,9 @@ class FormPhotoTests(BaseFixtureMixin, TestCase):
 
     def data(self, **fields):
         base = {
-            "code": self.equipment.code, "name": self.equipment.name,
+            "code": self.equipment.code, "equipment_no": self.equipment.code, "name": self.equipment.name,
             "category": self.category.pk, "location": self.location.pk,
-            "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
+            "plant": "CTV2", "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
             "parts-MIN_NUM_FORMS": "0", "parts-MAX_NUM_FORMS": "1000",
         }
         base.update(fields)

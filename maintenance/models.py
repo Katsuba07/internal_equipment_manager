@@ -89,7 +89,7 @@ class MaintenancePlan(DueScheduleMixin, TimeStampedModel):
         indexes = [models.Index(fields=["is_active", "next_due_at"])]
 
     def __str__(self) -> str:
-        return f"{self.equipment.code} — {self.name}"
+        return f"{self.equipment.ident} — {self.name}"
 
     def get_absolute_url(self) -> str:
         return reverse("maintenance:plan_detail", args=[self.pk])
@@ -172,7 +172,7 @@ class MaintenanceRecord(AttachmentMixin, TimeStampedModel):
         indexes = [models.Index(fields=["equipment", "-performed_at"])]
 
     def __str__(self) -> str:
-        return f"{self.equipment.code} — maintenance {self.performed_at:%d %b %Y}"
+        return f"{self.equipment.ident} — maintenance {self.performed_at:%d %b %Y}"
 
     def get_absolute_url(self) -> str:
         return reverse("maintenance:record_detail", args=[self.pk])

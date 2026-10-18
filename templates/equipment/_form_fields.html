@@ -1,4 +1,4 @@
-{% load crispy_forms_tags %}
+{% load crispy_forms_tags photos %}
 {% comment %}The asset form's fields — shared by the full page and the edit dialog.{% endcomment %}
 
   {% if form.non_field_errors %}
@@ -11,15 +11,19 @@
   <div class="card">
     <div class="card-head"><i class="bi bi-tag"></i> Identification</div>
     <div class="card-body">
+      {% comment %}In the order of a stock-take: the type gives the number, then the nameplate is read top to bottom, then the plant and its state; the company codes come later.{% endcomment %}
       <div class="field-grid">
-        <div>{{ form.code|as_crispy_field }}</div>
-        <div>{{ form.equipment_no|as_crispy_field }}</div>
-        <div>{{ form.asset_no|as_crispy_field }}</div>
-        <div>{{ form.serial_number|as_crispy_field }}</div>
-        <div class="span-all">{{ form.name|as_crispy_field }}</div>
         <div class="with-add"><div class="grow">{{ form.category|as_crispy_field }}</div><div class="qa-col"><label aria-hidden="true">&nbsp;</label>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new category" data-quick-add="{% url 'quick_add' 'category' %}" data-target="id_category"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></div>
+        <div>{{ form.equipment_no|as_crispy_field }}<div class="next-no" data-next-no="{% url 'equipment:next_no' %}" aria-live="polite"></div></div>
+        <div>{{ form.manufacturer|as_crispy_field }}</div>
+        <div>{{ form.model_number|as_crispy_field }}</div>
+        <div class="span-all">{{ form.name|as_crispy_field }}</div>
+        <div>{{ form.serial_number|as_crispy_field }}</div>
         <div>{{ form.plant|as_crispy_field }}</div>
-        <div class="with-add"><div class="grow">{{ form.location|as_crispy_field }}</div><div class="qa-col"><label aria-hidden="true">&nbsp;</label>{% if user.can_manage %}<button type="button" class="btn btn-default" title="Add a new location" data-quick-add="{% url 'quick_add' 'location' %}" data-target="id_location"><i class="bi bi-plus-lg"></i> New</button>{% endif %}</div></div>
+        <div>{{ form.status|as_crispy_field }}</div>
+        <div class="tick-field">{{ form.labelled|as_crispy_field }}</div>
+        <div>{{ form.code|as_crispy_field }}</div>
+        <div>{{ form.asset_no|as_crispy_field }}</div>
       </div>
     </div>
   </div>
@@ -42,7 +46,7 @@
       {% endif %}
       {% endwith %}
       {{ form.photos|as_crispy_field }}
-      <div class="photo-stage" data-photo-stage-for="{{ form.photos.id_for_label }}"></div>
+      {{ form.photos|photo_stage }}
     </div>
   </div>
 
@@ -64,19 +68,33 @@
       {% endif %}
       {% endwith %}
       {{ form.nameplate_photos|as_crispy_field }}
-      <div class="photo-stage" data-photo-stage-for="{{ form.nameplate_photos.id_for_label }}"></div>
+      {{ form.nameplate_photos|photo_stage }}
     </div>
   </div>
 
   <div class="card">
-    <div class="card-head"><i class="bi bi-cpu"></i> Technical</div>
+    <div class="card-head"><i class="bi bi-calendar-check"></i> Maintenance &amp; calibration</div>
     <div class="card-body">
-      <div class="field-grid">
-        <div>{{ form.manufacturer|as_crispy_field }}</div>
-        <div>{{ form.model_number|as_crispy_field }}</div>
-        <div>{{ form.year_made|as_crispy_field }}</div>
-        <div class="span-all">{{ form.specifications|as_crispy_field }}</div>
+      <div class="schedule-grid">
+        <div class="sched-tick">{{ form.maintenance_required|as_crispy_field }}</div>
+        <div>{{ form.maintenance_interval_days|as_crispy_field }}</div>
+        <div>{{ form.maintenance_last|as_crispy_field }}</div>
+        <div>{{ form.maintenance_next|as_crispy_field }}</div>
+        <div class="sched-tick">{{ form.is_measuring_device|as_crispy_field }}</div>
+        <div>{{ form.calibration_interval_months|as_crispy_field }}</div>
+        <div>{{ form.calibration_last|as_crispy_field }}</div>
+        <div>{{ form.calibration_next|as_crispy_field }}</div>
       </div>
+      {% comment %}Shown only when a save came back for want of a yes (the page normally asks first).{% endcomment %}
+      {% if form.calibration_confirmed.errors %}
+      <div class="alert alert-warning calibration-confirm">
+        <i class="bi bi-exclamation-triangle"></i>
+        <div>
+          <div>{{ form.calibration_confirmed.errors|join:" " }}</div>
+          <label class="form-check mt-1"><input type="checkbox" name="calibration_confirmed" class="form-check-input"> {{ form.calibration_confirmed.label }}</label>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -119,24 +137,9 @@
   </div>
 
   <div class="card">
-    <div class="card-head"><i class="bi bi-calendar-check"></i> Maintenance &amp; calibration</div>
-    <div class="card-body">
-      <div class="schedule-grid">
-        <div class="sched-tick">{{ form.maintenance_required|as_crispy_field }}</div>
-        <div>{{ form.maintenance_interval_days|as_crispy_field }}</div>
-        <div>{{ form.maintenance_last|as_crispy_field }}</div>
-        <div>{{ form.maintenance_next|as_crispy_field }}</div>
-        <div class="sched-tick">{{ form.is_measuring_device|as_crispy_field }}</div>
-        <div>{{ form.calibration_interval_months|as_crispy_field }}</div>
-        <div>{{ form.calibration_last|as_crispy_field }}</div>
-        <div>{{ form.calibration_next|as_crispy_field }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
     <div class="card-head"><i class="bi bi-three-dots"></i> Other</div>
     <div class="card-body">
+      {{ form.specifications|as_crispy_field }}
       {{ form.notes|as_crispy_field }}
     </div>
   </div>

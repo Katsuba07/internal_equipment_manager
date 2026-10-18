@@ -24,7 +24,7 @@
       {% if summary.released %}
       <p class="mb-1">These assets are <strong>released</strong> (not deleted) and become free to fit elsewhere:</p>
       <div class="mb-2">
-        {% for inst in summary.released %}<span class="cell-tag">{{ inst.component.code }}</span>{% endfor %}
+        {% for inst in summary.released %}<span class="cell-tag">{{ inst.component.ident }}</span>{% endfor %}
       </div>
       {% endif %}
 

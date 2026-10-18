@@ -102,7 +102,7 @@ class RepairRecord(AttachmentMixin, TimeStampedModel):
         indexes = [models.Index(fields=["equipment", "-started_at"])]
 
     def __str__(self) -> str:
-        return f"{self.code} — {self.equipment.code}"
+        return f"{self.code} — {self.equipment.ident}"
 
     def get_absolute_url(self) -> str:
         return reverse("repairs:detail", args=[self.pk])

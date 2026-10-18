@@ -13,6 +13,9 @@
     </div>
   </div>
   <div class="actions no-print">
+    <button type="button" class="btn btn-default" data-bulk-labels="{% url 'equipment:labels' %}" hidden>
+      <i class="bi bi-qr-code"></i> <span>Print labels (<span data-bulk-count>0</span>)</span>
+    </button>
     {% if user.is_admin %}
     <button type="button" class="btn btn-danger" data-bulk-delete="{% url 'equipment:bulk_delete' %}" hidden>
       <i class="bi bi-trash"></i> <span>Delete selected (<span data-bulk-count>0</span>)</span>
@@ -22,9 +25,6 @@
       <i class="bi bi-file-earmark-arrow-down"></i> <span class="hide-sm">Export</span>
     </a>
     {% if user.can_manage %}
-    <a href="{% url 'equipment:import' %}" class="btn btn-default">
-      <i class="bi bi-file-earmark-arrow-up"></i> <span class="hide-sm">Import</span>
-    </a>
     <a href="{% url 'equipment:create' %}" class="btn btn-primary">
       <i class="bi bi-plus-lg"></i> Add asset
     </a>
@@ -33,20 +33,15 @@
 </div>
 
 {% comment %}
-  One row of controls. Choosing a filter submits straight away, so there is no
-  separate Apply button to hunt for.
+  The search box. The filters live in the column headers of the table below
+  and belong to this form through form="list-filter"; choosing one submits
+  straight away, so there is no separate Apply button to hunt for.
 {% endcomment %}
-<form method="get" class="toolbar no-print" data-autosubmit>
+<form method="get" class="toolbar no-print" id="list-filter" data-autosubmit>
   <div class="search-wrap">
     <i class="bi bi-search"></i>
     {{ filter.form.q }}
   </div>
-  {{ filter.form.category }}
-  {{ filter.form.plant }}
-  {{ filter.form.location }}
-  {{ filter.form.status }}
-  {{ filter.form.serial }}
-  {{ filter.form.is_measuring_device }}
   <button type="submit" class="btn btn-default lg-hide">Search</button>
   {% if has_filters %}
   <a href="{% url 'equipment:list' %}" class="btn btn-ghost btn-sm">

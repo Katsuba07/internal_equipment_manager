@@ -23,26 +23,14 @@
   </div>
 </div>
 
-<form method="get" class="toolbar no-print" data-autosubmit>
+{# The type, plant and stock filters sit in their column headers below, tied to this form by form="list-filter". #}
+<form method="get" class="toolbar no-print" id="list-filter" data-autosubmit>
   <div class="search-wrap">
     <i class="bi bi-search"></i>
     <input type="search" name="q" value="{{ request.GET.q }}" class="search-input" placeholder="Search part number, description, MPN..."
            hx-get="{{ request.path }}" hx-trigger="input changed delay:300ms" hx-include="closest form"
            hx-target="#results" hx-select="#results" hx-swap="outerHTML" hx-push-url="true">
   </div>
-  <select name="plant" class="form-select">
-    <option value="">All plants</option>
-    {% for value, label in plants %}
-    <option value="{{ value }}" {% if request.GET.plant == value %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-  <select name="kind" class="form-select">
-    <option value="">All types</option>
-    {% for value, label in kinds %}
-    <option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-  <label class="form-check" style="display:flex"><input type="checkbox" name="low" value="1" {% if request.GET.low %}checked{% endif %}> <span>Low stock only</span></label>
   <label class="form-check" style="display:flex"><input type="checkbox" name="inactive" value="1" {% if request.GET.inactive %}checked{% endif %}> <span>Include inactive</span></label>
   <button type="submit" class="btn btn-default lg-hide">Search</button>
   {% if has_filters %}
@@ -52,17 +40,41 @@
 
 <div class="card" id="results">
   <div class="table-wrap">
-    <table class="data-table">
+    <table class="data-table fixed-cols" style="--table-min:74rem">
+      <colgroup>
+        {% if user.is_admin %}<col style="width:2.4rem">{% endif %}
+        <col style="width:11rem"><col><col style="width:10rem"><col style="width:6.5rem"><col style="width:6.5rem">
+        <col style="width:5.5rem"><col style="width:8rem"><col style="width:5rem"><col style="width:5.5rem">
+      </colgroup>
       <thead>
         <tr>
           {% if user.is_admin %}<th class="col-select"><input type="checkbox" data-bulk-all aria-label="Select all on this page"></th>{% endif %}
           <th>Part number</th>
           <th>Name</th>
-          <th>Type</th>
+          <th>
+            <select name="kind" form="list-filter" class="th-filter" aria-label="Filter by type">
+              <option value="">Type</option>
+              {% for value, label in kinds %}
+              <option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </th>
           <th class="text-end">On hand</th>
           <th class="text-end">Reorder at</th>
-          <th>Plant</th>
-          <th>Status</th>
+          <th>
+            <select name="plant" form="list-filter" class="th-filter" aria-label="Filter by plant">
+              <option value="">Plant</option>
+              {% for value, label in plants %}
+              <option value="{{ value }}" {% if request.GET.plant == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </th>
+          <th>
+            <select name="low" form="list-filter" class="th-filter" aria-label="Filter by stock status">
+              <option value="">Status</option>
+              <option value="1" {% if request.GET.low %}selected{% endif %}>Low stock</option>
+            </select>
+          </th>
           <th>Bin</th>
           <th class="text-end" title="Number of assets whose parts list includes this part">Used on</th>
         </tr>

@@ -64,7 +64,7 @@
     <a class="line-issue" href="{% url 'systems:products' %}?set={{ issue.set.pk }}">
       <span class="mono fw-600">{{ issue.set }}</span>
       <span class="subtle">{{ issue.line.role.name }}</span>
-      {% if issue.line.equipment %}<span class="mono">{{ issue.line.equipment.code }}</span>{% endif %}
+      {% if issue.line.equipment %}<span class="mono">{{ issue.line.equipment.ident }}</span>{% endif %}
       <span class="issue-why">{{ issue.line.detail|default:issue.line.state_label }}</span>
     </a>
     {% endfor %}
@@ -100,17 +100,17 @@
   <a class="tile" href="{% url 'equipment:list' %}">
     <span class="t-label">Assets</span>
     <span class="t-value">{{ total_equipment|intcomma }}</span>
-    <span class="t-foot">{{ in_production_count }} in production · {{ measuring_count }} calibrated</span>
+    <span class="t-foot">{{ in_use_count }} in use · {{ spare_count }} spare</span>
   </a>
-  <a class="tile {% if down_count %}bad{% endif %}" href="{% url 'equipment:list' %}?status=DOWN">
-    <span class="t-label">Down / repair</span>
-    <span class="t-value">{{ down_count }}</span>
+  <a class="tile {% if broken_count %}bad{% endif %}" href="{% url 'equipment:list' %}?status=BROKEN">
+    <span class="t-label">Broken</span>
+    <span class="t-value">{{ broken_count }}</span>
     <span class="t-foot">not available</span>
   </a>
-  <a class="tile {% if calibration_overdue_count %}bad{% endif %}" href="{% url 'equipment:list' %}?is_measuring_device=true">
+  <a class="tile {% if calibration_overdue_count or calibration_unknown_count %}bad{% endif %}" href="{% url 'equipment:list' %}?is_measuring_device=overdue">
     <span class="t-label">Calibration overdue</span>
-    <span class="t-value">{{ calibration_overdue_count }}</span>
-    <span class="t-foot">do not measure with these</span>
+    <span class="t-value">{{ calibration_overdue_count|add:calibration_unknown_count }}</span>
+    <span class="t-foot">{% if calibration_unknown_count %}{{ calibration_unknown_count }} with date unknown · {% endif %}do not measure with these</span>
   </a>
   <a class="tile {% if maintenance_overdue_count %}warn{% endif %}" href="{% url 'equipment:list' %}">
     <span class="t-label">Maintenance overdue</span>
@@ -188,7 +188,7 @@
               <div class="cal-items">
                 {% for entry in day.items %}
                 <a class="cal-chip cal-chip-{{ entry.kind }}" href="{{ entry.plan.equipment.get_absolute_url }}"
-                   title="{{ entry.plan.equipment.code }} — {{ entry.plan.name }}{% if entry.plan.fitted_in %} · in {{ entry.plan.fitted_in }}{% endif %}">{{ entry.plan.equipment.code }}</a>
+                   title="{{ entry.plan.equipment.ident }} — {{ entry.plan.name }}{% if entry.plan.fitted_in %} · in {{ entry.plan.fitted_in }}{% endif %}">{{ entry.plan.equipment.ident }}</a>
                 {% endfor %}
                 {% if day.overflow %}<span class="cal-more">+{{ day.overflow }} more</span>{% endif %}
               </div>
@@ -206,7 +206,7 @@
           <a class="row-item" href="{{ entry.plan.equipment.get_absolute_url }}"
              title="{{ entry.plan.equipment.name }} — {{ entry.plan.name }}{% if entry.plan.fitted_in %} · in {{ entry.plan.fitted_in }}{% endif %}">
             <span class="cal-dot cal-dot-{{ entry.kind }}"></span>
-            <span class="mono">{{ entry.plan.equipment.code }}</span>
+            <span class="mono">{{ entry.plan.equipment.ident }}</span>
             <span class="row-main row-title">{% if entry.plan.fitted_in %}<span class="in-set">{{ entry.plan.fitted_in }}</span>{% else %}{{ entry.plan.name }}{% endif %}</span>
             <span class="subtle small">{{ entry.kind|capfirst }}</span>
             <span class="badge {{ entry.plan.due_badge_class }}">{{ entry.plan.due_display }}</span>
@@ -232,7 +232,7 @@
       {% for incident in open_incidents %}
       <a class="row-item" href="{{ incident.equipment.get_absolute_url }}" title="{{ incident.code }} — {{ incident.title }}">
         <span class="dot dot-{{ incident.severity_badge_class|cut:'badge-' }}"></span>
-        <span class="mono">{{ incident.equipment.code }}</span>
+        <span class="mono">{{ incident.equipment.ident }}</span>
         <span class="row-main row-title">{{ incident.title }}</span>
         <span class="badge {{ incident.status_badge_class }}">{{ incident.get_status_display }}</span>
       </a>

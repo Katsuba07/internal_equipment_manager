@@ -11,7 +11,10 @@
       <tr>
         {% for column in table.columns %}
         <th {{ column.attrs.th.as_html }}>
-          {% if column.orderable %}
+          {% if column.header_filter %}
+            {# The filter is the header: its empty choice reads as the column's title. #}
+            <span class="th-filter-wrap">{{ column.header_filter }}{% if column.orderable %}<a class="th-sort" href="{% querystring_replace table.prefixed_order_by_field=column.order_by_alias.next %}" title="Sort by {{ column.header }}" aria-label="Sort by {{ column.header }}"><i class="bi bi-{% if column.is_ordered %}caret-{% if column.order_by_alias.is_descending %}down{% else %}up{% endif %}-fill sort-indicator{% else %}arrow-down-up{% endif %}"></i></a>{% endif %}</span>
+          {% elif column.orderable %}
             <a href="{% querystring_replace table.prefixed_order_by_field=column.order_by_alias.next %}">
               {{ column.header }}
               {% if column.is_ordered %}

@@ -48,7 +48,7 @@
 {% if used_in %}
 <table class="pv-table">
   {% for line in used_in|slice:":8" %}
-  <tr><td><a class="mono" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.code }}</a></td><td class="subtle">{{ line.equipment.name }}</td><td class="text-end nowrap">×{{ line.quantity|floatformat:"-2" }}</td></tr>
+  <tr><td><a class="mono" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.ident }}</a></td><td class="subtle">{{ line.equipment.name }}</td><td class="text-end nowrap">×{{ line.quantity|floatformat:"-2" }}</td></tr>
   {% endfor %}
 </table>
 {% if used_in|length > 8 %}<div class="small subtle">… and {{ used_in|length|add:"-8" }} more on the full page.</div>{% endif %}

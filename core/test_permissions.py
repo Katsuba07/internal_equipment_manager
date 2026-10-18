@@ -12,7 +12,7 @@ from core.tests import BaseFixtureMixin
 # A viewer may still do these: they write nothing that belongs to anyone else.
 ALLOWED_FOR_VIEWERS = {"logout", "password_change", "password_change_done", "login", "document_sync"}
 # Downloads: answering a POST with the file is harmless.
-READ_ONLY = {"import_template", "export"}
+READ_ONLY = {"export"}
 
 
 def all_routes(resolver=None, prefix=""):

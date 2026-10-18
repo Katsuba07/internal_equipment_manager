@@ -40,7 +40,7 @@ class PlantTests(BaseFixtureMixin, TestCase):
         self.assertEqual(self.other.plant, "CTV1")
         self.login(Role.VIEWER)
         page = self.client.get(reverse("equipment:detail", args=[self.other.pk]))
-        self.assertContains(page, "Not set")
+        self.assertContains(page, "CTV1")
         listing = self.client.get(reverse("equipment:list") + "?plant=CTV1")
         self.assertContains(listing, "CART-900")
 
@@ -80,15 +80,15 @@ class PlantTests(BaseFixtureMixin, TestCase):
         body = self.client.get(reverse("systems:product_create"), HTTP_HX_REQUEST="true").content.decode()
         self.assertIn('name="plant"', body)
         self.assertIn("CTV1", body)
-        self.client.post(reverse("systems:product_create"), {"code": "PTHREE1", "plant": "CTV1"})
+        self.client.post(reverse("systems:product_create"), {"code": "PTHREE1", "equipment_no": "PTHREE1", "plant": "CTV1"})
         self.assertEqual(Product.objects.get(code="PTHREE1").plant, "CTV1")
 
 
 class ScheduledMaintenanceTests(BaseFixtureMixin, TestCase):
     def asset_data(self, **extra):
         data = {
-            "code": self.equipment.code, "name": self.equipment.name,
-            "category": self.category.pk, "location": self.location.pk,
+            "code": self.equipment.code, "equipment_no": self.equipment.code, "name": self.equipment.name,
+            "category": self.category.pk, "plant": "CTV2",
             "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
         }
         data.update(extra)
@@ -156,42 +156,12 @@ class DashboardNumbersTests(BaseFixtureMixin, TestCase):
 
 
 class ModalFormTests(BaseFixtureMixin, TestCase):
-    """Change status, receive and issue open in a dialog instead of a page."""
+    """Receive and issue open in a dialog instead of a page."""
 
     hx = {"HTTP_HX_REQUEST": "true"}
 
     def setUp(self):
         self.part = InventoryItem.objects.create(code="PRB-5", name="Probe", unit="pcs")
-
-    def test_status_change_opens_as_a_fragment_and_saves(self):
-        self.login(Role.TECHNICIAN)
-        url = reverse("equipment:status_change", args=[self.equipment.pk])
-        fragment = self.client.get(url, **self.hx).content.decode()
-        self.assertIn("Change status", fragment)
-        self.assertNotIn("<html", fragment)
-        response = self.client.post(url, {"status": "DOWN", "reason": "Broken probe plate"}, **self.hx)
-        self.assertEqual(response.json(), {"reload": True, "message": ""})
-        self.equipment.refresh_from_db()
-        self.assertEqual(self.equipment.status, "DOWN")
-
-    def test_status_change_errors_come_back_as_the_form(self):
-        # In production cannot be picked for an asset not fitted to a running product.
-        self.login(Role.TECHNICIAN)
-        self.equipment.change_status("DOWN", None)
-        url = reverse("equipment:status_change", args=[self.equipment.pk])
-        response = self.client.post(url, {"status": "IN_PRODUCTION"}, **self.hx)
-        self.assertEqual(response["Content-Type"].split(";")[0], "text/html")
-        self.assertContains(response, "Select a valid choice")
-        self.equipment.refresh_from_db()
-        self.assertEqual(self.equipment.status, "DOWN")
-
-    def test_a_reason_is_optional(self):
-        self.login(Role.TECHNICIAN)
-        url = reverse("equipment:status_change", args=[self.equipment.pk])
-        response = self.client.post(url, {"status": "REPAIR"}, **self.hx)
-        self.assertEqual(response.json()["reload"], True)
-        self.equipment.refresh_from_db()
-        self.assertEqual(self.equipment.status, "REPAIR")
 
     def test_receive_and_issue_in_the_dialog(self):
         self.login(Role.TECHNICIAN)
@@ -213,8 +183,6 @@ class ModalFormTests(BaseFixtureMixin, TestCase):
 
     def test_the_same_urls_still_work_as_full_pages(self):
         self.login(Role.TECHNICIAN)
-        page = self.client.get(reverse("equipment:status_change", args=[self.equipment.pk]))
-        self.assertContains(page, "<html")
         response = self.client.post(
             reverse("inventory:part_stock", args=[self.part.pk]),
             {"transaction_type": "IN", "quantity": "5"},
@@ -223,7 +191,5 @@ class ModalFormTests(BaseFixtureMixin, TestCase):
 
     def test_buttons_carry_the_dialog_url(self):
         self.login(Role.TECHNICIAN)
-        asset_page = self.client.get(self.equipment.get_absolute_url()).content.decode()
-        self.assertIn('data-modal-form="/equipment/%d/status/"' % self.equipment.pk, asset_page)
         part_page = self.client.get(self.part.get_absolute_url()).content.decode()
         self.assertIn("data-modal-form=", part_page)

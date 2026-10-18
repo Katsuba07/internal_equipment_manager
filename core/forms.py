@@ -55,19 +55,62 @@ class RequestFormMixin:
         super().__init__(*args, **kwargs)
 
 
+class StagedPhoto(str):
+    """The token of a photo uploaded ahead of its form (see core.photos.stage_upload)."""
+
+
 class PhotoPicker(forms.FileInput):
     """
     One button for several pictures. ``accept="image/*"`` is what makes a
     phone offer both the camera and the gallery; a PC opens its file browser.
     (``capture`` is left off on purpose: it would force the camera.)
+
+    Each picture is uploaded as soon as it is picked (app.js) and comes back
+    with the form as a token in ``<name>__staged``; the previews below the
+    button are drawn here too, so a form returned with an error keeps them.
     """
 
     allow_multiple_selected = True
 
     def __init__(self, attrs=None):
-        # data-photo-stage: each pick is added to the ones before (app.js), so
-        # a phone can take photo after photo instead of replacing the last.
         super().__init__({"accept": "image/*", "multiple": True, "data-photo-stage": True, **(attrs or {})})
+
+    def value_from_datadict(self, data, files, name):
+        from .photos import STAGE_TOKEN
+
+        picked = list(super().value_from_datadict(data, files, name) or [])
+        tokens = data.getlist(f"{name}__staged") if hasattr(data, "getlist") else []
+        return picked + [StagedPhoto(t) for t in dict.fromkeys(tokens) if STAGE_TOKEN.match(t)]
+
+    def value_omitted_from_data(self, data, files, name):
+        return super().value_omitted_from_data(data, files, name) and not (
+            hasattr(data, "getlist") and data.getlist(f"{name}__staged")
+        )
+
+    def render(self, name, value, attrs=None, renderer=None):
+        picker = super().render(name, None, attrs, renderer)
+        return format_html("{}{}", picker, photo_stage_html(name, value, (attrs or {}).get("id", "")))
+
+
+def photo_stage_html(name, value, input_id):
+    """
+    The previews under a photo picker, with the photos already sent ahead.
+
+    The forms rendered by crispy draw the picker from crispy's own template,
+    so they put this in with ``{{ form.photos|photo_stage }}``.
+    """
+    from django.urls import reverse
+
+    staged = [v for v in (value or []) if isinstance(v, StagedPhoto)] if isinstance(value, (list, tuple)) else []
+    items = format_html_join(
+        "",
+        '<div class="photo-stage-item is-done"><img src="{}" alt="">'
+        '<input type="hidden" name="{}__staged" value="{}">'
+        '<button type="button" data-photo-unstage title="Take this photo out" aria-label="Take this photo out">'
+        '<i class="bi bi-x-lg"></i></button></div>',
+        ((reverse("photo_staged", args=[token]), name, token) for token in staged),
+    )
+    return format_html('<div class="photo-stage" data-photo-stage-for="{}">{}</div>', input_id, items)
 
 
 class PhotosField(forms.FileField):
@@ -81,17 +124,25 @@ class PhotosField(forms.FileField):
         super().__init__(*args, **kwargs)
 
     def clean(self, data, initial=None):
-        from .photos import MAX_FILES, check_image
+        from .photos import MAX_FILES, check_image, staged_file
 
-        files = [f for f in (data if isinstance(data, (list, tuple)) else [data]) if f]
-        if len(files) > MAX_FILES:
+        items = [f for f in (data if isinstance(data, (list, tuple)) else [data]) if f]
+        if len(items) > MAX_FILES:
             raise ValidationError(f"At most {MAX_FILES} photos at a time.")
         cleaned = []
-        for upload in files:
-            upload = super().clean(upload, initial)
-            check_image(upload)
+        for item in items:
+            if isinstance(item, StagedPhoto):
+                upload = staged_file(item)
+                if upload is None:
+                    raise ValidationError("A photo sent earlier is no longer on the server. Add it again.")
+            else:
+                upload = super().clean(item, initial)
+                check_image(upload)
             cleaned.append(upload)
         return cleaned
+
+    def bound_data(self, data, initial):
+        return data          # the staged tokens, so a returned form shows them again
 
 
 class PhotoRemovalWidget(forms.SelectMultiple):

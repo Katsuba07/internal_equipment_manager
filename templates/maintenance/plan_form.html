@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% load crispy_forms_tags %}
 
-{% block title %}{% if editing %}Edit plan{% else %}New plan{% endif %} — {{ equipment.code }}{% endblock %}
+{% block title %}{% if editing %}Edit plan{% else %}New plan{% endif %} — {{ equipment.ident }}{% endblock %}
 
 {% block breadcrumb %}
 <nav class="crumbs">
   <a href="{% url 'equipment:list' %}">Equipment</a><span class="sep">/</span>
-  <a href="{{ equipment.get_absolute_url }}" class="mono">{{ equipment.code }}</a><span class="sep">/</span>
+  <a href="{{ equipment.get_absolute_url }}" class="mono">{{ equipment.ident }}</a><span class="sep">/</span>
   <span>{% if editing %}Edit plan{% else %}New plan{% endif %}</span>
 </nav>
 {% endblock %}
@@ -16,7 +16,7 @@
   <div class="page-head">
     <div>
       <h1>{% if editing %}Edit maintenance plan{% else %}New maintenance plan{% endif %}</h1>
-      <div class="sub"><span class="mono">{{ equipment.code }}</span> · {{ equipment.name }}</div>
+      <div class="sub"><span class="mono">{{ equipment.ident }}</span> · {{ equipment.name }}</div>
     </div>
   </div>
   <div class="card">

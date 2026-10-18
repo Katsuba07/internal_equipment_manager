@@ -171,7 +171,7 @@ class EquipmentPart(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.equipment.code}: {self.quantity_display} x {self.item.code}"
+        return f"{self.equipment.ident}: {self.quantity_display} x {self.item.code}"
 
     @property
     def quantity_display(self) -> str:

@@ -12,6 +12,7 @@
     </div>
   </div>
   <div class="actions no-print">
+    <a href="{% url 'systems:stations' %}" class="btn btn-default"><i class="bi bi-diagram-3"></i> <span class="hide-sm">Stations</span></a>
     {% if documents_synced %}
     <form method="post" action="{% url 'systems:document_sync' %}">
       {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -35,18 +36,18 @@
     <option value="">All customers</option>
     {% for c in customers %}<option value="{{ c.code }}" {% if customer == c.code %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
   </select>
+  <select name="production" class="form-select" aria-label="Production">
+    <option value="">All products</option>
+    <option value="yes" {% if production == "yes" %}selected{% endif %}>In production ({{ count_production }})</option>
+    <option value="no" {% if production == "no" %}selected{% endif %}>Not in production</option>
+  </select>
   <select name="plant" class="form-select">
     <option value="">All plants</option>
     {% for value, label in plants %}<option value="{{ value }}" {% if plant == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
   </select>
   <button type="submit" class="btn btn-default lg-hide">Search</button>
-  {% if query or customer %}<a href="?plant={{ plant }}" class="btn btn-ghost btn-sm"><i class="bi bi-x-lg"></i> Clear</a>{% endif %}
+  {% if query or customer or production %}<a href="?plant={{ plant }}" class="btn btn-ghost btn-sm"><i class="bi bi-x-lg"></i> Clear</a>{% endif %}
 </form>
-
-<div class="prod-tabs no-print" role="tablist">
-  <a role="tab" class="prod-tab{% if not show_all %} is-on{% endif %}" href="?show=production{% if query %}&q={{ query|urlencode }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}">In production <span class="badge badge-neutral">{{ count_production }}</span></a>
-  <a role="tab" class="prod-tab{% if show_all %} is-on{% endif %}" href="?show=all{% if query %}&q={{ query|urlencode }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}">All products <span class="badge badge-neutral">{{ count_all }}</span></a>
-</div>
 
 <div class="products-split" data-split>
   <div class="products-list">
@@ -55,9 +56,7 @@
       <summary class="card-head">
         <i class="bi bi-chevron-down cust-caret"></i>
         <span class="fw-600">{{ group.name }}</span>
-        <span class="badge badge-neutral" title="{% if show_all %}products{% else %}in production of all products{% endif %}">
-          {{ group.products|length }}{% if not show_all %} of {{ group.total }}{% endif %}
-        </span>
+        <span class="badge badge-neutral" title="products">{{ group.products|length }}</span>
       </summary>
       {% for row in group.products %}
       {% with product=row.product %}
@@ -87,7 +86,7 @@
           {% for s in row.steps %}
           <div class="flow-step" data-step-id="{{ s.step.pk }}"{% if user.can_manage %} draggable="true"{% endif %}>
             <a href="?process={{ s.step.pk }}" class="flow-head{% if selected.process == s.step.pk|stringformat:'d' %} sel{% endif %}{% if s.golden.has_warning %} bad{% endif %}" draggable="false"
-               title="{{ s.step.process.name }} — click to edit its roles{% if user.can_manage %}, drag to reorder{% endif %}"
+               title="{{ s.step.process.name }} — click for its stations and golden samples{% if user.can_manage %}, drag to reorder{% endif %}"
                hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}" data-select>
               {{ s.step.process.code }}{% if s.golden.has_warning %} <i class="bi bi-award"></i>{% endif %}
               {% for warning in s.golden.warnings %}<span class="flow-golden">Golden: {{ warning }}</span>{% endfor %}
@@ -99,18 +98,22 @@
                  hx-get="{% url 'systems:set_panel' x.set.pk %}" hx-target="#panel" hx-push-url="?set={{ x.set.pk }}" data-select>
                 <span class="flow-set-head">
                   <span class="dot {% if product.in_production %}{{ x.readiness.dot_class }}{% else %}dot-neutral{% endif %}"></span>
-                  <b>#{{ x.set.number }}</b>
+                  {% if x.set.station %}<b class="mono">{{ x.set.station }}</b>{% else %}<b>#{{ x.set.number }}</b> <span class="cell-muted small">no station</span>{% endif %}
                   {% if product.in_production and x.readiness.lines and not x.readiness.is_ready %}<span class="flow-issue">{{ x.readiness.label }}</span>{% endif %}
                 </span>
+                {% comment %}
+                  Only what this model brings itself (its fixture...). The
+                  station's shared machines are on the station's own page; a
+                  problem with one still shows as an issue on the line above.
+                {% endcomment %}
                 <span class="flow-eq">
                   {% for st in x.readiness.lines %}
-                    {% if st.equipment %}
-                    <span class="{% if st.is_blocking and product.in_production %}bad{% endif %}" title="{{ st.role.name }}{% if st.detail %}: {{ st.detail }}{% endif %}">{{ st.equipment.code }}{% if st.is_blocking and product.in_production %} <i class="bi bi-exclamation-triangle-fill"></i>{% endif %}</span>
+                    {% if st.from_station %}
+                    {% elif st.equipment %}
+                    <span class="{% if st.is_blocking and product.in_production %}bad{% endif %}" title="{{ st.role.name }}{% if st.detail %}: {{ st.detail }}{% endif %}">{{ st.equipment.ident }}{% if st.is_blocking and product.in_production %} <i class="bi bi-exclamation-triangle-fill"></i>{% endif %}</span>
                     {% elif st.is_blocking and product.in_production %}
                     <span class="missing" title="{{ st.role.name }}: nothing fitted">— {{ st.role.name }}</span>
                     {% endif %}
-                  {% empty %}
-                    <span class="cell-muted">no roles yet</span>
                   {% endfor %}
                 </span>
               </a>
@@ -130,8 +133,8 @@
     <div class="card">
       <div class="empty">
         <i class="bi bi-box-seam"></i>
-        <div class="title">{% if query or customer %}No product found{% elif show_all %}No products yet{% else %}Nothing in production{% endif %}</div>
-        <div class="desc">{% if query or customer %}Nothing matches — try another code or clear the search.{% elif show_all %}Add a product to start.{% else %}No product is in production. Open <b>All products</b> to see the rest.{% endif %}</div>
+        <div class="title">{% if query or customer or production %}No product found{% else %}No products yet{% endif %}</div>
+        <div class="desc">{% if query or customer or production %}Nothing matches — try another filter or clear it.{% else %}Add a product to start.{% endif %}</div>
       </div>
     </div>
     {% endfor %}

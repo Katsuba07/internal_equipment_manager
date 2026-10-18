@@ -1,0 +1,17 @@
+{% comment %}New or edit station in a dialog, like the asset form (see StationFormView.render_form).{% endcomment %}
+<form method="post" action="{% if station.pk %}{% url 'systems:station_edit' station.pk %}{% else %}{{ request.get_full_path }}{% endif %}" class="quick-add-form modal-wide" novalidate>
+  {% csrf_token %}
+  <div class="qa-head">
+    <span class="fw-600">{% if station.pk %}{% if notice %}New station{% else %}Edit station{% endif %} — <span class="mono">{{ station }}</span>{% else %}New station{% endif %}</span>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-qa-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="qa-body">
+    {% if notice %}<div class="alert alert-success"><i class="bi bi-check-circle"></i><div>{{ notice }}</div></div>{% endif %}
+    {% include "systems/_station_form_fields.html" %}
+  </div>
+  <div class="qa-foot">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+    <button type="button" class="btn btn-ghost" data-qa-close>Cancel</button>
+    {% if station.pk and user.is_admin %}<a href="{% url 'systems:station_delete' station.pk %}" class="btn btn-danger ms-auto"><i class="bi bi-trash"></i> Delete</a>{% endif %}
+  </div>
+</form>

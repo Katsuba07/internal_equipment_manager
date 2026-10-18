@@ -108,11 +108,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         context["total_equipment"] = total
         context["measuring_count"] = equipment.filter(is_measuring_device=True).count()
-        context["in_production_count"] = counts.get(EquipmentStatus.IN_PRODUCTION, 0)
-        context["down_count"] = (
-            counts.get(EquipmentStatus.DOWN, 0)
-            + counts.get(EquipmentStatus.REPAIR, 0)
-        )
+        context["in_use_count"] = counts.get(EquipmentStatus.IN_USE, 0)
+        context["spare_count"] = counts.get(EquipmentStatus.SPARE, 0)
+        context["broken_count"] = counts.get(EquipmentStatus.BROKEN, 0)
 
         # --- Things that need attention ---
         maintenance = MaintenancePlan.objects.filter(is_active=True).select_related(
@@ -127,6 +125,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
         context["calibration_overdue_count"] = calibration.filter(next_due_at__lt=today).count()
         context["calibration_due_count"] = calibration.filter(next_due_at__lte=next_month).count()
+        # Needs calibration but no due date on record: as bad as overdue.
+        context["calibration_unknown_count"] = Equipment.objects.calibration_date_unknown().count()
 
         # Calibration and maintenance due dates, as a navigable month calendar
         # (see dashboard.html) — easier to plan around than a flat list.
@@ -182,6 +182,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             + len(context["line"]["golden_warnings"])
             + context["maintenance_overdue_count"]
             + context["calibration_overdue_count"]
+            + context["calibration_unknown_count"]
             + context["open_incident_count"]
             + context["low_stock_count"]
         )

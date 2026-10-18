@@ -25,24 +25,24 @@ class StatusHistoryInline(admin.TabularInline):
 @admin.register(Equipment)
 class EquipmentAdmin(SimpleHistoryAdmin):
     list_display = (
-        "code", "name", "category", "location", "status",
+        "equipment_no", "code", "name", "category", "plant", "status",
         "is_measuring_device",
     )
-    list_filter = ("status", "category", "location", "is_measuring_device")
+    list_filter = ("status", "category", "plant", "is_measuring_device")
     search_fields = (
-        "code", "name", "serial_number", "model_number", "manufacturer",
+        "equipment_no", "code", "name", "serial_number", "model_number", "manufacturer",
     )
-    autocomplete_fields = ("category", "location")
+    autocomplete_fields = ("category",)
     inlines = [StatusHistoryInline, AttachmentInline]
     readonly_fields = ("status_changed_at", "created_at", "updated_at")
 
     fieldsets = (
-        ("Identification", {"fields": ("code", "name", "category", "location")}),
+        ("Identification", {"fields": ("equipment_no", "code", "name", "category", "plant")}),
         (
             "Technical",
             {
                 "fields": (
-                    "manufacturer", "model_number", "serial_number", "year_made",
+                    "manufacturer", "model_number", "serial_number",
                     "specifications",
                 )
             },
@@ -51,8 +51,8 @@ class EquipmentAdmin(SimpleHistoryAdmin):
             "Status",
             {
                 "fields": ("status", "status_changed_at"),
-                "description": "Changing status here does NOT record a reason. "
-                "Prefer the 'Change status' action in the main application.",
+                "description": "Changing status here does NOT record it in the history. "
+                "Prefer the asset form in the main application.",
             },
         ),
         ("Calibration", {"fields": ("is_measuring_device",)}),

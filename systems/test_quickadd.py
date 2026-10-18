@@ -39,20 +39,11 @@ class QuickAddTests(Fixture, TestCase):
         self.assertEqual(response["Content-Type"].split(";")[0], "text/html")
         self.assertContains(response, "already exists")
 
-    def test_new_process_with_template_roles(self):
+    def test_new_process_is_a_code_and_a_name(self):
         self.login(Role.MANAGER)
-        data = self.quick("systemtype", {
-            "code": "burnin", "name": "Burn-in", "roles": "fix\n\nFixture: FIX\nDMM",
-        }).json()
+        data = self.quick("systemtype", {"code": "burnin", "name": "Burn-in"}).json()
         process = SystemType.objects.get(pk=data["id"])
-        roles = list(process.roles.order_by("position"))
-        self.assertEqual([r.name for r in roles], ["Fixture 1", "Fixture 2", "Digital multimeter"])
-        self.assertEqual(list(roles[0].allowed_categories.all()), [self.fix_cat])
-
-    def test_unknown_category_code_in_roles_is_refused(self):
-        self.login(Role.MANAGER)
-        response = self.quick("systemtype", {"code": "X", "name": "X", "roles": "Thing: NOPE"})
-        self.assertContains(response, "No equipment type with code NOPE")
+        self.assertEqual((process.code, process.name), ("BURNIN", "Burn-in"))
 
     def test_new_asset_gets_opening_history(self):
         self.login(Role.MANAGER)
@@ -115,32 +106,15 @@ class ReviewFixTests(Fixture, TestCase):
         self.assertEqual(plan.due_display, "1 day overdue")
 
 
-class TemplateAdminTests(Fixture, TestCase):
-    def test_admin_template_roles_are_equipment_types(self):
+class ProcessAdminTests(Fixture, TestCase):
+    def test_admin_edits_a_process_as_a_code_and_a_name(self):
         admin_user = self.users[Role.ADMIN]
         admin_user.is_superuser = True
         admin_user.save()
         self.login(Role.ADMIN)
         url = reverse("admin:systems_systemtype_change", args=[self.fct.pk])
-        page = self.client.get(url)
-        self.assertEqual(page.status_code, 200)
-        roles = list(self.fct.roles.order_by("position"))
-        data = {
-            "code": "FCT", "name": "Functional test", "position": "3", "is_active": "on",
-            "roles-TOTAL_FORMS": "4", "roles-INITIAL_FORMS": "3",
-            "roles-MIN_NUM_FORMS": "0", "roles-MAX_NUM_FORMS": "1000",
-        }
-        for i, role in enumerate(roles):
-            data.update({
-                f"roles-{i}-id": role.pk, f"roles-{i}-system_type": self.fct.pk,
-                f"roles-{i}-position": role.position, f"roles-{i}-category": role.allowed_categories.first().pk,
-                f"roles-{i}-is_required": "on",
-            })
-        data.update({"roles-3-system_type": self.fct.pk, "roles-3-position": "4",
-                     "roles-3-category": self.dmm_cat.pk, "roles-3-is_required": "on"})
-        response = self.client.post(url, data)
-        self.assertEqual(response.status_code, 302, getattr(response, "context", None) and response.context.get("errors"))
-        self.assertEqual(
-            list(self.fct.roles.order_by("position").values_list("name", flat=True)),
-            ["Test cart", "Fixture", "Digital multimeter 1", "Digital multimeter 2"],
-        )
+        self.assertEqual(self.client.get(url).status_code, 200)
+        response = self.client.post(url, {"code": "FCT", "name": "Functional test (final)", "position": "3", "is_active": "on"})
+        self.assertEqual(response.status_code, 302)
+        self.fct.refresh_from_db()
+        self.assertEqual(self.fct.name, "Functional test (final)")

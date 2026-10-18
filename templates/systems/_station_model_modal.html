@@ -1,0 +1,46 @@
+{% comment %}A model on a station, in a dialog: which model (when adding) and the machines it brings (its fixture...). See StationModelDialogMixin.{% endcomment %}
+<form method="post" action="{{ request.get_full_path }}" class="quick-add-form modal-wide" novalidate>
+  {% csrf_token %}
+  <div class="qa-head">
+    <span class="fw-600">{% if test_set %}<span class="mono">{{ test_set.product.code }}</span> on <span class="mono">{{ station }}</span>{% else %}Add a model to <span class="mono">{{ station }}</span>{% endif %}</span>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-qa-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="qa-body">
+    {% if error %}<div class="alert alert-danger"><i class="bi bi-exclamation-octagon"></i><div>{{ error }}</div></div>{% endif %}
+    {% if not test_set %}
+    <div class="card">
+      <div class="card-body">
+        <label class="form-label" for="id_product">Model</label>
+        <select name="product" id="id_product" class="form-select" required>
+          <option value="">— choose a model —</option>
+          {% for product in products %}<option value="{{ product.pk }}"{% if product == chosen_product %} selected{% endif %}>{{ product.code }}{% if product.name %} · {{ product.name }}{% endif %}</option>{% endfor %}
+        </select>
+        {% if not products %}<div class="form-text">Every model{% if station.customer %} of {{ station.customer.name }}{% endif %} already runs on this station.</div>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="card{% if not test_set %} mt-2{% endif %}">
+      <div class="card-head"><i class="bi bi-box-seam"></i> Its own machines <span class="subtle small">mounted only while this model runs on the station</span></div>
+      <div class="setup-rows">
+        {% for row in rows %}
+        <div class="setup-row" data-qa-scope>
+          <div class="setup-role"><span class="fw-600">{{ row.slot.name }}</span>{% if not row.slot.is_required %} <span class="badge badge-neutral">optional</span>{% endif %}</div>
+          <div class="setup-eq">
+            {% include "core/_asset_picker.html" with name=row.name chosen=row.chosen input_id=row.input_id source=row.source empty_text=row.empty_text %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="card-body cell-muted">The station lists nothing a model brings. Add it in Edit station, under "What each model brings" (for example its fixture).</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card mt-2">
+      <div class="card-head"><i class="bi bi-hdd-stack"></i> Shared by the station <span class="badge badge-neutral">{{ shared|length }}</span></div>
+      <div class="card-body">{% for asset in shared %}<a class="cell-tag" href="{{ asset.get_absolute_url }}" title="{{ asset.category.name }} · {{ asset.name }}">{{ asset.ident }}</a>{% empty %}<span class="cell-muted">None</span>{% endfor %}</div>
+    </div>
+  </div>
+  <div class="qa-foot">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> {% if test_set %}Save{% else %}Add model{% endif %}</button>
+    <button type="button" class="btn btn-ghost" data-qa-close>Cancel</button>
+  </div>
+</form>

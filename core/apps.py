@@ -6,5 +6,6 @@ class CoreConfig(AppConfig):
     name = 'core'
 
     def ready(self):
-        # Registers the signal that removes a photo's files when it is deleted.
-        from . import photos  # noqa: F401
+        # Registers the signal that removes a photo's files when it is deleted,
+        # and the ones that count failed sign-ins.
+        from . import login_guard, photos  # noqa: F401

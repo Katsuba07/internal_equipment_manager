@@ -18,10 +18,11 @@ from .models import (
     SLOT_STATE_BADGE,
     GoldenSample,
     Installation,
-    ProcessRole,
     ProductDocument,
     ProductProcess,
     SlotState,
+    Station,
+    StationSlot,
     TestSet,
 )
 
@@ -30,6 +31,8 @@ def unusable_reason(equipment: Equipment) -> str:
     """Why this asset cannot be relied on right now, or an empty string."""
     if equipment.status in UNAVAILABLE_STATUSES:
         return equipment.get_status_display()
+    if equipment.calibration_date_unknown:
+        return "Calibration date unknown"
     for plan in equipment.calibration_plans.all():
         if plan.is_active and plan.is_overdue:
             return f"Calibration {plan.due_display.lower()}"
@@ -42,11 +45,24 @@ def unusable_reason(equipment: Equipment) -> str:
 # ------------------------------------------------------------------ readiness
 
 
+@dataclass(frozen=True)
+class Need:
+    """
+    One line of a set's check: a shared machine of the station, or a slot the
+    model fills itself. ``name``/``is_required``/``category`` read like a slot.
+    """
+
+    name: str
+    is_required: bool = True
+    category: object = None
+    slot: object = None
+
+
 @dataclass
 class RoleStatus:
-    """The verdict for one role of one set."""
+    """The verdict for one line of one set: a shared machine, or one of the model's slots."""
 
-    role: ProcessRole
+    role: Need
     state: str
     detail: str = ""
     installation: Installation | None = None
@@ -54,6 +70,11 @@ class RoleStatus:
     @property
     def equipment(self):
         return self.installation.component if self.installation else None
+
+    @property
+    def from_station(self) -> bool:
+        """A machine the station shares, rather than one the model brought itself."""
+        return bool(self.installation and self.installation.station_id)
 
     @property
     def is_blocking(self) -> bool:
@@ -94,7 +115,7 @@ class SetReadiness:
     @property
     def label(self) -> str:
         if not self.lines:
-            return "No roles"
+            return "No station" if not self.test_set.station_id else "Nothing on it"
         if self.is_ready:
             return "Ready"
         count = len(self.blocking)
@@ -103,51 +124,71 @@ class SetReadiness:
     @property
     def summary(self) -> str:
         if not self.lines:
-            return "No roles declared for this process yet"
+            if not self.test_set.station_id:
+                return "Not run on any station yet"
+            return "The station has no machines and no slots yet"
         problems = self.blocking
         if not problems:
-            return "Every required role fitted and usable"
+            return "Every machine in place and usable"
         first = problems[0]
         rest = len(problems) - 1
         text = f"{first.role.name}: {first.detail or first.state_label}"
         return f"{text} (+{rest} more)" if rest else text
 
 
-def evaluate_set(test_set: TestSet, roles=None, installations=None) -> SetReadiness:
-    """
-    Check each role of a set against what is fitted to it.
+def _with_plans(queryset):
+    return queryset.select_related("component__category").prefetch_related(
+        "component__calibration_plans", "component__maintenance_plans"
+    )
 
-    ``roles`` and ``installations`` may be passed in when the caller has
-    already loaded them for many sets at once (the overview page).
+
+def _check(need, installation) -> RoleStatus:
+    asset = installation.component
+    if need.category is not None and asset.category_id != need.category.pk:
+        return RoleStatus(need, SlotState.WRONG_CATEGORY,
+                          f"{asset.category.name}, needs {need.category.name}", installation)
+    reason = unusable_reason(asset)
+    if reason:
+        return RoleStatus(need, SlotState.UNUSABLE, reason, installation)
+    return RoleStatus(need, SlotState.READY, "", installation)
+
+
+def evaluate_set(test_set: TestSet, station_installations=None, installations=None, slots=None) -> SetReadiness:
     """
-    if roles is None:
-        roles = list(test_set.product_process.roles.select_related("category"))
+    Whether a model's set can run: every machine its station shares must be
+    usable, and every slot of the station filled by the model with a usable
+    machine of the right kind.
+
+    The three lists may be passed in when the caller has already loaded them
+    for many sets (the overview page).
+    """
+    if not test_set.station_id:
+        return SetReadiness(test_set, [])
+    station = test_set.station
+    if station_installations is None:
+        station_installations = list(_with_plans(station.open_installations()))
     if installations is None:
-        installations = list(
-            test_set.open_installations().select_related("component__category")
-            .prefetch_related("component__calibration_plans", "component__maintenance_plans")
-        )
-    by_role = {inst.role_id: inst for inst in installations}
+        installations = list(_with_plans(test_set.open_installations()))
+    if slots is None:
+        slots = list(station.slots.select_related("category"))
 
-    lines = []
-    for role in roles:
-        installation = by_role.get(role.id)
+    lines = [
+        _check(Need(inst.component.category.name, True, inst.component.category), inst)
+        for inst in station_installations
+    ]
+    by_slot = {inst.slot_id: inst for inst in installations if inst.slot_id}
+    for slot in slots:
+        need = Need(slot.name, slot.is_required, slot.category, slot)
+        installation = by_slot.get(slot.pk)
         if installation is None:
-            state = SlotState.EMPTY if role.is_required else SlotState.OPTIONAL_EMPTY
-            lines.append(RoleStatus(role, state))
-            continue
-        asset = installation.component
-        if not role.accepts(asset):
-            lines.append(RoleStatus(
-                role, SlotState.WRONG_CATEGORY,
-                f"{asset.category.name}, needs {role.category.name}", installation,
-            ))
-            continue
-        reason = unusable_reason(asset)
-        if reason:
-            lines.append(RoleStatus(role, SlotState.UNUSABLE, reason, installation))
-            continue
-        lines.append(RoleStatus(role, SlotState.READY, "", installation))
+            state = SlotState.EMPTY if slot.is_required else SlotState.OPTIONAL_EMPTY
+            lines.append(RoleStatus(need, state))
+        else:
+            lines.append(_check(need, installation))
+    # A machine fitted to the set without a slot (older records) still counts.
+    for inst in installations:
+        if not inst.slot_id:
+            lines.append(_check(Need(inst.component.category.name, True, None), inst))
     return SetReadiness(test_set, lines)
 
 
@@ -185,7 +226,8 @@ def filtered_products(plant: str = "", query: str = "", customer: str = ""):
     return products
 
 
-def products_overview(show_all: bool = False, plant: str = "", query: str = "", customer: str = "") -> list[CustomerGroup]:
+def products_overview(show_all: bool = False, plant: str = "", query: str = "", customer: str = "",
+                      production: str = "") -> list[CustomerGroup]:
     """
     Every customer with its products, each product with its processes and, for
     each process, its sets and the equipment fitted in them now.
@@ -200,21 +242,22 @@ def products_overview(show_all: bool = False, plant: str = "", query: str = "", 
             Prefetch(
                 "processes",
                 queryset=ProductProcess.objects.select_related("process").prefetch_related(
-                    Prefetch("roles", queryset=ProcessRole.objects.select_related("category")),
-                    Prefetch("sets", queryset=TestSet.objects.select_related("line").order_by("number")),
+                    Prefetch("sets", queryset=TestSet.objects.select_related("line", "station").order_by("number")),
                     "golden_samples",
                 ),
             )
         )
         .order_by("code")
     )
-    open_installs = {}
-    for inst in (
-        Installation.objects.filter(removed_at__isnull=True, test_set__isnull=False)
-        .select_related("component__category")
-        .prefetch_related("component__calibration_plans", "component__maintenance_plans")
-    ):
-        open_installs.setdefault(inst.test_set_id, []).append(inst)
+    open_installs, station_installs = {}, {}
+    for inst in _with_plans(Installation.objects.filter(removed_at__isnull=True)):
+        if inst.test_set_id:
+            open_installs.setdefault(inst.test_set_id, []).append(inst)
+        elif inst.station_id:
+            station_installs.setdefault(inst.station_id, []).append(inst)
+    station_slots = {}
+    for slot in StationSlot.objects.select_related("category"):
+        station_slots.setdefault(slot.station_id, []).append(slot)
 
     groups: dict = {}
     totals: dict = {}
@@ -223,20 +266,21 @@ def products_overview(show_all: bool = False, plant: str = "", query: str = "", 
         totals[key] = totals.get(key, 0) + 1
         if not (show_all or product.in_production):
             continue
+        # The Production filter: "yes" running only, "no" idle only.
+        if production == "yes" and not product.in_production or production == "no" and product.in_production:
+            continue
         steps = []
         for step in product.processes.all():
-            roles = list(step.roles.all())
-            role_order = {role.id: index for index, role in enumerate(roles)}
             sets = []
             for test_set in step.sets.all():
-                installs = sorted(
-                    open_installs.get(test_set.id, []),
-                    key=lambda inst: role_order.get(inst.role_id, 999),
-                )
+                installs = open_installs.get(test_set.id, [])
                 sets.append({
                     "set": test_set,
                     "installations": installs,
-                    "readiness": evaluate_set(test_set, roles, installs),
+                    "readiness": evaluate_set(
+                        test_set, station_installs.get(test_set.station_id, []), installs,
+                        station_slots.get(test_set.station_id, []),
+                    ),
                 })
             steps.append({"step": step, "sets": sets, "golden": step.golden_status()})
         groups.setdefault(key, (product.customer, []))[1].append({"product": product, "steps": steps})
@@ -250,15 +294,17 @@ def products_overview(show_all: bool = False, plant: str = "", query: str = "", 
 
 def set_detail(test_set: TestSet) -> dict:
     """Everything the right-hand panel shows for one set."""
-    installs = list(
-        test_set.open_installations()
-        .select_related("component__category", "component__location")
-        .prefetch_related(
-            "component__calibration_plans", "component__maintenance_plans",
-            "component__parts__item", "component__attachments",
+    def load(queryset):
+        return list(
+            queryset.select_related("component__category", "component__location").prefetch_related(
+                "component__calibration_plans", "component__maintenance_plans",
+                "component__parts__item", "component__attachments",
+            )
         )
-    )
-    readiness = evaluate_set(test_set, installations=installs)
+
+    installs = load(test_set.open_installations())
+    station = load(test_set.station.open_installations()) if test_set.station_id else []
+    readiness = evaluate_set(test_set, station_installations=station, installations=installs)
     return {"test_set": test_set, "readiness": readiness}
 
 
@@ -268,39 +314,51 @@ def set_detail(test_set: TestSet) -> dict:
 @transaction.atomic
 def apply_set_changes(test_set: TestSet, picks: dict, user) -> list[str]:
     """
-    Make a set hold exactly the chosen assets.
+    Make a model's set hold exactly the chosen machines in its station's slots.
 
-    ``picks`` maps role id -> Equipment or None. Roles not in ``picks`` are left
-    alone. Removals happen before fits so assets can move between roles of the
-    same set. Returns a short list of what changed.
+    ``picks`` maps slot id -> Equipment or None. Slots not in ``picks`` are
+    left alone. Removals happen before fits so a machine can move between
+    slots of the same set. Returns a short list of what changed.
     """
     chosen = [asset.id for asset in picks.values() if asset is not None]
     if len(chosen) != len(set(chosen)):
-        raise ValidationError("The same asset is chosen for two roles.")
+        raise ValidationError("The same asset is chosen for two slots.")
 
-    roles = {role.id: role for role in test_set.product_process.roles.all()}
-    current = {inst.role_id: inst for inst in test_set.open_installations().select_related("component")}
+    slots = {slot.pk: slot for slot in test_set.station.slots.select_related("category")} if test_set.station_id else {}
+    current = {inst.slot_id: inst for inst in test_set.open_installations().select_related("component") if inst.slot_id}
     changes = []
-    for role_id, asset in picks.items():
-        inst = current.get(role_id)
+    for slot_id, asset in picks.items():
+        inst = current.get(slot_id)
         if inst and (asset is None or inst.component_id != asset.id):
-            inst.release(user, reason="Changed on the products page")
-            changes.append(f"removed {inst.component.code}")
-    for role_id, asset in picks.items():
-        inst = current.get(role_id)
+            inst.release(user, reason=f"Changed on station {test_set.station}")
+            changes.append(f"removed {inst.component.ident}")
+    for slot_id, asset in picks.items():
+        inst = current.get(slot_id)
         if asset is not None and not (inst and inst.component_id == asset.id):
-            Installation.fit(asset, test_set, roles[role_id], user, reason="Fitted on the products page")
-            changes.append(f"fitted {asset.code}")
+            Installation.fit(asset, test_set, slots[slot_id], user, reason=f"Fitted on station {test_set.station}")
+            changes.append(f"fitted {asset.ident}")
     return changes
 
 
-def busy_map(exclude_set: TestSet | None = None) -> dict:
-    """asset id -> where it is fitted, for every asset fitted somewhere."""
+def busy_map(exclude_set: TestSet | None = None, exclude_station: Station | None = None,
+             models_of: Station | None = None) -> dict:
+    """
+    asset id -> where it is fitted, for every asset fitted somewhere. Filling
+    a set, its own station's equipment is not "busy": it is there to be used,
+    and neither are the other models' own machines there (a fixture may serve
+    several). ``models_of`` is the same for a model not added yet.
+    """
     qs = Installation.objects.filter(removed_at__isnull=True).select_related(
-        "test_set__product_process__product", "test_set__product_process__process"
+        "test_set__product_process__product", "test_set__product_process__process", "station"
     )
     if exclude_set is not None:
         qs = qs.exclude(test_set=exclude_set)
+        if exclude_set.station_id:
+            qs = qs.exclude(station_id=exclude_set.station_id).exclude(test_set__station_id=exclude_set.station_id)
+    if models_of is not None:
+        qs = qs.exclude(station=models_of).exclude(test_set__station=models_of)
+    if exclude_station is not None:
+        qs = qs.exclude(station=exclude_station)
     return {inst.component_id: inst.where for inst in qs}
 
 
@@ -313,14 +371,12 @@ def deletion_summary(obj) -> dict:
         sets = TestSet.objects.filter(product_process__product=obj)
         removed = [
             ("Processes", obj.processes.count()),
-            ("Roles", ProcessRole.objects.filter(product_process__product=obj).count()),
             ("Equipment sets", sets.count()),
             ("Golden samples", GoldenSample.objects.filter(product_process__product=obj).count()),
         ]
     elif isinstance(obj, ProductProcess):
         sets = obj.sets.all()
         removed = [
-            ("Roles", obj.roles.count()),
             ("Equipment sets", sets.count()),
             ("Golden samples", obj.golden_samples.count()),
         ]
@@ -359,7 +415,7 @@ def equipment_usage(equipment: Equipment) -> dict:
     history = list(
         Installation.objects.select_related(
             "test_set__product_process__product", "test_set__product_process__process",
-            "role", "installed_by", "removed_by",
+            "role", "station", "installed_by", "removed_by",
         )
         .filter(component=equipment)
         .order_by("-installed_at")[:20]

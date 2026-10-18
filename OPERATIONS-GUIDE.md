@@ -15,7 +15,7 @@ For whoever runs and looks after the system. No programming knowledge assumed.
 7. [Users and roles](#7-users-and-roles)
 7b. [Plants (CTV1, CTV2, CTVN)](#7b-plants-ctv1-ctv2-ctvn)
 7c. [Scheduled maintenance](#7c-scheduled-maintenance)
-8. [Importing your asset list](#8-importing-your-asset-list)
+8. [Adding assets](#8-adding-assets)
 9. [The Products page](#9-the-products-page)
 9b. [Spare parts and parts lists](#9b-spare-parts-and-parts-lists)
 10. [Common problems](#10-common-problems)
@@ -279,24 +279,9 @@ On the asset form, tick **Maintenance required** and choose how often: 1 week,
 
 ---
 
-## 8. Importing your asset list
+## 8. Adding assets
 
-### Prepare first
-
-Create the catalogs in **Admin site**, because the spreadsheet refers to them by code:
-
-- **Categories** — e.g. `FIX-ICT` / ICT fixture, `PSU` / Power supply
-- **Locations** — e.g. `FCT-RM` / FCT Room
-- **Suppliers** (optional)
-
-### The steps
-
-1. Go to **Equipment** → **Import**.
-2. Click **Download template**. It comes with a *Reference* sheet listing every category, location and supplier code already in the system — no need to look them up.
-3. Fill in the **Equipment** sheet. Columns with a **red header** are required. **Delete the example row** before uploading.
-4. Upload the file and click **Import**.
-
-> The whole file is validated **before anything is written**. If any row is wrong, nothing is imported and you get a list of problems with row numbers. Fix the spreadsheet and upload again — there is no risk of a half-finished import.
+Assets are added one by one with **Equipment → Add asset** (the spreadsheet import has been removed). Choose the **Category** first: the form suggests the next Equipment No for that type, and ticks *Requires calibration* for measuring instruments. **Equipment → Export** gives the whole register as a formatted Excel file, photos included.
 
 ---
 
@@ -457,23 +442,53 @@ Photos are stored in `data\uploads\` and are included in the nightly backup
 
 ## 11. Access from outside the plant
 
-To reach the system from home or over mobile data, **do not forward a port on the router** — that is the fastest route to being attacked.
+To reach the system from home or over mobile data, **do not forward a port on the router**: that is the fastest route to being attacked, and IT will not allow it anyway.
 
-Two safe options:
+Use a **Cloudflare Tunnel**. `cloudflared` runs on the server and connects *out* to Cloudflare, so nothing is opened on the plant's firewall. Cloudflare then serves the app at `https://ema.<your domain>`, with HTTPS. The data stays on the server. The LAN address (`http://<server IP>:8000`) keeps working as before.
 
-1. **Cloudflare Tunnel** (free, recommended) — install `cloudflared` on the server; it creates an outbound tunnel with no inbound ports opened.
-2. **Company VPN** — simplest if one already exists.
+> **Tell IT first.** Technically nothing has to be opened, but a tunnel puts an internal system on the internet, and company policy may ask for approval.
 
-Once it is reachable from the internet, you **must** update `.env` on the server:
+### What it costs
+
+The Cloudflare account, the tunnel and the HTTPS certificate are free. The only cost is the **domain name**, per year:
+
+- **Cloudflare Registrar**: sold at cost, a `.com` is about 10 USD a year. Needs an international card (Visa/Master).
+- **A Vietnamese registrar** (Mắt Bão, PA Vietnam, Tenten…): domestic card or bank transfer, with a VAT invoice. Then point the domain's nameservers to Cloudflare (free).
+
+### Set it up (once)
+
+1. **Cloudflare account and domain.** Sign up at dash.cloudflare.com (free plan). Buy the domain under *Domain Registration*, or add a domain bought elsewhere and change its nameservers as Cloudflare shows.
+2. **Create the tunnel.** *Zero Trust → Networks → Tunnels → Create a tunnel*, type **Cloudflared**, name it `ema-factory`. Copy the **token** from the install command it shows (the long string after `service install`).
+3. **Install it on the server.** In PowerShell opened *as Administrator*, in the project folder:
+   ```powershell
+   .\scripts\install-tunnel.ps1 -Token <the token>
+   ```
+   It installs `cloudflared` if needed and runs the tunnel as a Windows service that starts with the PC. In Cloudflare the tunnel turns **HEALTHY**.
+4. **Point a name at the app.** In the tunnel, tab *Public Hostname → Add*: subdomain `ema`, your domain, service **HTTP**, URL `localhost:8000`.
+5. **HTTPS only.** *SSL/TLS → Edge Certificates*: turn on **Always Use HTTPS**.
+6. **Tell the app its public address.** In `.env` on the server add the line below, then run `.\scripts\update.ps1` (or restart the service):
+   ```
+   EMA_PUBLIC_URL=https://ema.<your domain>
+   ```
+   Do **not** set `EMA_BEHIND_HTTPS_PROXY=True`: it forces https and secure cookies, which locks out everyone on the LAN address.
+7. **Accounts.** The sign-in page is now the only gate, so before you share the address: make sure every password is a real one (8+ characters, not common), delete accounts nobody uses, and give *Administrator* only to who needs it.
+
+### Protection against password guessing
+
+After **5 failed sign-ins** for one user name, or from one address, signing in is refused for **15 minutes**, the right password included. This covers the app's sign-in page and `/admin/`. A successful sign-in clears the count; restarting the app clears all of them. Change the numbers in `.env` if needed:
 
 ```
-EMA_DEBUG=False
-EMA_ALLOWED_HOSTS=ema.company.com
-EMA_CSRF_TRUSTED_ORIGINS=https://ema.company.com
-EMA_BEHIND_HTTPS_PROXY=True
+EMA_LOGIN_MAX_FAILURES=5
+EMA_LOGIN_LOCKOUT_MINUTES=15
 ```
 
-Restart the service afterwards, and review everyone's passwords — once the system is on the internet, a weak password becomes a real exposure.
+### Printing labels from outside
+
+Label printing goes through Zebra Browser Print on the computer you use, as inside the plant. The first time you print from the new address, Browser Print asks to trust it: accept.
+
+### Remove the tunnel
+
+On the server, as Administrator: `cloudflared service uninstall`. Then delete the tunnel in Cloudflare and remove `EMA_PUBLIC_URL` from `.env`.
 
 ## Product documents (SharePoint)
 

@@ -64,10 +64,20 @@ class LocationAdmin(admin.ModelAdmin):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "is_active")
-    list_filter = ("is_active",)
+    list_display = ("code", "name", "needs_calibration", "asset_count", "last_equipment_no", "is_active")
+    list_filter = ("is_active", "needs_calibration")
     search_fields = ("code", "name")
-    list_editable = ("is_active",)
+    list_editable = ("needs_calibration", "is_active")
+
+    @admin.display(description="Assets")
+    def asset_count(self, obj):
+        return obj.equipments.count()
+
+    @admin.display(description="Last Equipment No")
+    def last_equipment_no(self, obj):
+        from equipment.models import Equipment
+
+        return Equipment.equipment_no_counter(obj)["last"] or "—"
 
 
 @admin.register(Customer)

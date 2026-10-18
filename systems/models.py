@@ -258,6 +258,134 @@ class ProcessRole(TimeStampedModel):
         return self.category_id is None or equipment.category_id == self.category_id
 
 
+class Station(TimeStampedModel):
+    """
+    A test station that stays put and serves several products: BAF-FCT-01.
+
+    It holds the machines every model run there shares (PC, DMM, power
+    supply...) and lists, as slots, what each model must bring itself
+    (its FCT fixture, a load box...). A model's set on the station fills the
+    slots; it is ready when every shared machine and every filled slot can be
+    used. A station always does one kind of process.
+    """
+
+    code = models.CharField("Station", max_length=40, unique=True, help_text="For example: FCT#1")
+    process = models.ForeignKey(
+        SystemType, verbose_name="Process", on_delete=models.PROTECT, related_name="stations"
+    )
+    customer = models.ForeignKey(
+        "core.Customer", verbose_name="Customer", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="stations",
+    )
+    line = models.ForeignKey(
+        "core.Location", verbose_name="Line / location", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="stations",
+    )
+    notes = models.CharField("Notes", max_length=255, blank=True)
+    # The model set up on the station right now. Its own machines (its fixture...)
+    # are the ones mounted; every other model's are kept aside until a changeover.
+    running_set = models.ForeignKey(
+        "TestSet", verbose_name="Model running now", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+    running_since = models.DateTimeField("Running since", null=True, blank=True)
+
+    # Typed in capitals or not, kept in capitals, like an asset's identifying text.
+    UPPER_FIELDS = ("code", "notes")
+
+    class Meta:
+        verbose_name = "Station"
+        verbose_name_plural = "Stations"
+        ordering = ["process__position", "code"]
+
+    def __str__(self) -> str:
+        return self.code
+
+    def open_installations(self):
+        return self.installations.filter(removed_at__isnull=True)
+
+    def product_codes(self) -> list[str]:
+        codes = self.test_sets.values_list("product_process__product__code", flat=True)
+        return sorted(set(codes))
+
+    @transaction.atomic
+    def set_equipment(self, assets, user) -> list[str]:
+        """Make the station hold exactly these assets. Returns what changed."""
+        wanted = {asset.pk: asset for asset in assets}
+        current = {inst.component_id: inst for inst in self.open_installations().select_related("component")}
+        changes = []
+        for asset_id, inst in current.items():
+            if asset_id not in wanted:
+                inst.release(user, reason=f"Taken off station {self}")
+                changes.append(f"removed {inst.component.ident}")
+        for asset_id, asset in wanted.items():
+            if asset_id not in current:
+                Installation.place_at_station(asset, self, user)
+                changes.append(f"added {asset.ident}")
+        return changes
+
+    @transaction.atomic
+    def changeover(self, test_set, user, note: str = ""):
+        """
+        Set up ``test_set`` (one of this station's models, or None for none) on
+        the station: its own machines become the mounted ones. Logged with who
+        and when. Returns the log entry, or None when nothing changed.
+        """
+        if test_set is not None and test_set.station_id != self.pk:
+            raise ValidationError(f"{test_set} does not run on {self}.")
+        if (test_set.pk if test_set else None) == self.running_set_id:
+            return None
+        entry = StationChangeover.objects.create(
+            station=self, from_set=self.running_set, to_set=test_set,
+            from_label=str(self.running_set) if self.running_set_id else "",
+            to_label=str(test_set) if test_set else "",
+            changed_by=user if getattr(user, "is_authenticated", False) else None, note=note,
+        )
+        self.running_set = test_set
+        self.running_since = timezone.now() if test_set else None
+        self.save(update_fields=["running_set", "running_since", "updated_at"])
+        return entry
+
+    def save(self, *args, **kwargs):
+        for field in self.UPPER_FIELDS:
+            setattr(self, field, " ".join(str(getattr(self, field) or "").split()).upper())
+        super().save(*args, **kwargs)
+
+    @transaction.atomic
+    def delete(self, *args, user=None, **kwargs):
+        """Free the equipment first; the assets keep their history."""
+        for installation in self.open_installations():
+            installation.release(user, reason=f"Station {self} removed")
+        self.installations.update(set_label=f"station {self}")
+        return super().delete(*args, **kwargs)
+
+
+class StationSlot(TimeStampedModel):
+    """One thing each model run on a station brings itself: its FCT fixture, a load box."""
+
+    station = models.ForeignKey(Station, verbose_name="Station", on_delete=models.CASCADE, related_name="slots")
+    category = models.ForeignKey(
+        "core.Category", verbose_name="Equipment type", on_delete=models.PROTECT, related_name="station_slots",
+    )
+    is_required = models.BooleanField("Required", default=True)
+    position = models.PositiveIntegerField("Order", default=0)
+
+    class Meta:
+        verbose_name = "Station slot"
+        verbose_name_plural = "Station slots"
+        ordering = ["position", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.station} · {self.name}"
+
+    @property
+    def name(self) -> str:
+        return self.category.name
+
+    def accepts(self, equipment) -> bool:
+        return equipment.category_id == self.category_id
+
+
 class TestSet(TimeStampedModel):
     """A physical set at one process of one product: BAF1950 · FCT #2, on a line."""
 
@@ -268,6 +396,11 @@ class TestSet(TimeStampedModel):
     line = models.ForeignKey(
         "core.Location", verbose_name="Line / location", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="test_sets",
+    )
+    station = models.ForeignKey(
+        Station, verbose_name="Station", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="test_sets",
+        help_text="The station this set runs on; the set fills the station's slots.",
     )
     notes = models.CharField("Notes", max_length=255, blank=True)
 
@@ -288,6 +421,11 @@ class TestSet(TimeStampedModel):
     def product(self):
         return self.product_process.product
 
+    @property
+    def is_running(self) -> bool:
+        """Set up on its station right now: its own machines are mounted there."""
+        return bool(self.station_id) and self.station.running_set_id == self.pk
+
     def open_installations(self):
         return self.installations.filter(removed_at__isnull=True)
 
@@ -304,9 +442,38 @@ class TestSet(TimeStampedModel):
         return super().delete(*args, **kwargs)
 
 
+class StationChangeover(TimeStampedModel):
+    """One changeover of a station from one model to another: who, when, from what to what."""
+
+    station = models.ForeignKey(Station, verbose_name="Station", on_delete=models.CASCADE, related_name="changeovers")
+    from_set = models.ForeignKey(
+        TestSet, verbose_name="From", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    to_set = models.ForeignKey(
+        TestSet, verbose_name="To", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    # Readable even after a set is removed.
+    from_label = models.CharField("From (snapshot)", max_length=200, blank=True)
+    to_label = models.CharField("To (snapshot)", max_length=200, blank=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, verbose_name="By", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+    note = models.CharField("Note", max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Station changeover"
+        verbose_name_plural = "Station changeovers"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.station}: {self.from_label or 'nothing'} → {self.to_label or 'nothing'}"
+
+
 class Installation(TimeStampedModel):
     """
-    An asset fitted to one role of one set; closed rows are its history.
+    An asset fitted to one role of one set, or placed at a station; closed
+    rows are its history.
 
     ``set_label`` keeps a readable snapshot so the history still reads well
     after the set, its process or its product has been deleted.
@@ -322,6 +489,14 @@ class Installation(TimeStampedModel):
     )
     role = models.ForeignKey(
         ProcessRole, verbose_name="Role", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="installations",
+    )
+    station = models.ForeignKey(
+        Station, verbose_name="Station", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="installations",
+    )
+    slot = models.ForeignKey(
+        StationSlot, verbose_name="Slot", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="installations",
     )
     set_label = models.CharField("Set (snapshot)", max_length=200, blank=True)
@@ -348,24 +523,45 @@ class Installation(TimeStampedModel):
             models.Index(fields=["test_set", "-installed_at"]),
         ]
         constraints = [
+            # A machine stands at one station at a time; a model's own machine may
+            # still serve several models of that station (one fitting per model).
             models.UniqueConstraint(
                 fields=["component"],
-                condition=Q(removed_at__isnull=True),
-                name="one_open_installation_per_component",
+                condition=Q(removed_at__isnull=True, station__isnull=False),
+                name="one_open_station_placement_per_component",
+            ),
+            models.UniqueConstraint(
+                fields=["component", "test_set"],
+                condition=Q(removed_at__isnull=True, test_set__isnull=False),
+                name="one_open_fitting_per_component_and_set",
             ),
             models.UniqueConstraint(
                 fields=["test_set", "role"],
                 condition=Q(removed_at__isnull=True),
                 name="one_open_installation_per_role",
             ),
+            models.UniqueConstraint(
+                fields=["test_set", "slot"],
+                condition=Q(removed_at__isnull=True, slot__isnull=False),
+                name="one_open_installation_per_slot",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.component.code} in {self.where}"
+        return f"{self.component.ident} in {self.where}"
 
     @property
     def where(self) -> str:
-        return str(self.test_set) if self.test_set_id else (self.set_label or "removed set")
+        if self.station_id:
+            return f"station {self.station}"
+        if not self.test_set_id:
+            return self.set_label or "removed set"
+        test_set = self.test_set
+        if not test_set.station_id:
+            return str(test_set)
+        # A model's own machine is on the station only while that model runs there.
+        state = "mounted" if test_set.is_running else "kept aside"
+        return f"{test_set} · station {test_set.station} ({state})"
 
     @property
     def is_open(self) -> bool:
@@ -373,44 +569,65 @@ class Installation(TimeStampedModel):
 
     @classmethod
     @transaction.atomic
-    def fit(cls, component, test_set, role, user, reason: str = ""):
+    def fit(cls, component, test_set, slot, user, reason: str = ""):
         """
-        Fit an asset to one role of a set.
+        Fit a model's own machine into one slot of its set.
 
-        Refuses with a readable reason when the role belongs to another process,
-        the asset is the wrong kind, the role already holds another asset, or
-        the asset is fitted in another set.
+        Refuses with a readable reason when the slot belongs to another
+        station, the asset is the wrong kind, the slot already holds another
+        asset, or the asset is fitted somewhere else. Another model of the
+        same station is not "somewhere else": a fixture may serve several.
         """
-        if role.product_process_id != test_set.product_process_id:
-            raise ValidationError(f"{role.name} is not a role of {test_set}.")
-        if not role.accepts(component):
+        if slot.station_id != test_set.station_id:
+            raise ValidationError(f"{slot.name} is not a slot of {test_set.station or 'the station of ' + str(test_set)}.")
+        if not slot.accepts(component):
             raise ValidationError(
-                f"{component.code} is a {component.category.name}; "
-                f"{role.name} needs a {role.category.name}."
+                f"{component.ident} is a {component.category.name}; this slot needs a {slot.category.name}."
             )
         occupied = cls.objects.filter(
-            test_set=test_set, role=role, removed_at__isnull=True
+            test_set=test_set, slot=slot, removed_at__isnull=True
         ).exclude(component=component).select_related("component").first()
         if occupied:
             raise ValidationError(
-                f"{role.name} of {test_set} already holds {occupied.component.code}; remove it first."
+                f"{slot.name} of {test_set} already holds {occupied.component.code}; remove it first."
             )
-        open_now = cls.objects.filter(component=component, removed_at__isnull=True).first()
-        if open_now:
-            if open_now.test_set_id == test_set.id and open_now.role_id == role.id:
-                return open_now
+        open_now = list(
+            cls.objects.filter(component=component, removed_at__isnull=True).select_related("test_set", "station")
+        )
+        for other in open_now:
+            if other.test_set_id == test_set.id:
+                if other.slot_id == slot.id:
+                    return other
+                raise ValidationError(f"{component.ident} already fills {other.slot.name if other.slot_id else 'a slot'} of {test_set}.")
+            if other.test_set_id and other.test_set.station_id and other.test_set.station_id == test_set.station_id:
+                continue          # shared with another model of the same station
             raise ValidationError(
-                f"{component.code} is currently fitted in {open_now.where}. Remove it there first."
+                f"{component.ident} is currently fitted in {other.where}. Remove it there first."
             )
         installation = cls.objects.create(
-            component=component,
-            test_set=test_set,
-            role=role,
-            set_label=str(test_set),
+            component=component, test_set=test_set, slot=slot, set_label=str(test_set),
             installed_by=user if getattr(user, "is_authenticated", False) else None,
             reason=reason,
         )
-        component.refresh_production_status(user)
+        return installation
+
+    @classmethod
+    @transaction.atomic
+    def place_at_station(cls, component, station, user, reason: str = ""):
+        """Put an asset at a station; refused while it is fitted somewhere else."""
+        open_now = list(cls.objects.filter(component=component, removed_at__isnull=True))
+        here = next((inst for inst in open_now if inst.station_id == station.id), None)
+        if here:
+            return here
+        if open_now:
+            raise ValidationError(
+                f"{component.ident} is currently fitted in {open_now[0].where}. Remove it there first."
+            )
+        installation = cls.objects.create(
+            component=component, station=station, set_label=f"station {station}",
+            installed_by=user if getattr(user, "is_authenticated", False) else None,
+            reason=reason or f"Placed at station {station}",
+        )
         return installation
 
     @transaction.atomic
@@ -423,7 +640,6 @@ class Installation(TimeStampedModel):
         if reason:
             self.reason = reason
         self.save(update_fields=["removed_at", "removed_by", "reason", "updated_at"])
-        self.component.refresh_production_status(user)
         return self
 
 

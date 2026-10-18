@@ -39,12 +39,12 @@ DEFAULT_SOURCE = pathlib.Path(settings.BASE_DIR) / "data" / "import" / "computim
 STATUS = {
     # In service there means "in use somewhere"; In production here means
     # fitted to a running product, which the Products page decides.
-    "in service": EquipmentStatus.AVAILABLE,
-    "scrapped": EquipmentStatus.RETIRED,
-    "missing": EquipmentStatus.DOWN,
-    "output of service": EquipmentStatus.AVAILABLE,
-    "being sold": EquipmentStatus.RETIRED,
-    "end-of-life (eol)": EquipmentStatus.RETIRED,
+    "in service": EquipmentStatus.IN_USE,
+    "scrapped": EquipmentStatus.BROKEN,
+    "missing": EquipmentStatus.BROKEN,
+    "output of service": EquipmentStatus.SPARE,
+    "being sold": EquipmentStatus.BROKEN,
+    "end-of-life (eol)": EquipmentStatus.BROKEN,
 }
 
 # Categories whose assets are instruments that get calibrated.
@@ -177,7 +177,7 @@ class Command(BaseCommand):
             "manufacturer": "" if self.is_plant(row.get("manufacturer")) else (row.get("manufacturer") or "")[:150],
             "model_number": (row.get("model") or "")[:150],
             "serial_number": (row.get("serial_no") or "")[:150],
-            "status": STATUS.get((row.get("status") or "").strip().lower(), EquipmentStatus.AVAILABLE),
+            "status": STATUS.get((row.get("status") or "").strip().lower(), EquipmentStatus.IN_USE),
             "is_measuring_device": (row.get("category") or "").strip().lower() in MEASURING,
             "maintenance_required": bool(months),
             "maintenance_interval_days": INTERVAL_DAYS.get(months or 0, 365) if months else None,

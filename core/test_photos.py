@@ -90,8 +90,11 @@ class PhotoTests(BaseFixtureMixin, TestCase):
             product=Product.objects.create(code="P1", name="P1"),
             process=SystemType.objects.create(code="ICT", name="ICT"),
         )
-        role = step.roles.create(name="Fixture", category=self.category, position=1)
-        test_set = TestSet.objects.create(product_process=step, number=1)
+        from systems.models import Station
+
+        station = Station.objects.create(code="ICT-01", process=step.process)
+        role = station.slots.create(category=self.category, position=1)
+        test_set = TestSet.objects.create(product_process=step, number=1, station=station)
         Installation.fit(self.equipment, test_set, role, self.users[Role.ADMIN])
         panel = self.client.get(reverse("systems:set_panel", args=[test_set.pk]), HTTP_HX_REQUEST="true")
         self.assertContains(panel, photo.thumbnail.url)
@@ -170,9 +173,9 @@ class PhotoTests(BaseFixtureMixin, TestCase):
         self.upload(self.nameplate_url(), image_file("n.png"))
         nameplate = self.equipment.nameplate_photos[0]
         self.client.post(reverse("equipment:update", args=[self.equipment.pk]), {
-            "code": self.equipment.code, "name": self.equipment.name, "category": self.category.pk,
+            "code": self.equipment.code, "equipment_no": self.equipment.code, "name": self.equipment.name, "category": self.category.pk,
             "remove_nameplate_photos": [str(nameplate.pk)],
-            "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
+            "plant": "CTV2", "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
         })
         self.assertEqual(len(self.equipment.nameplate_photos), 0)
         self.assertEqual(len(self.equipment.photos), 1)

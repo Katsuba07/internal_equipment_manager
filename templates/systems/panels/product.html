@@ -22,41 +22,56 @@
     {% if product.description %}<div class="subtle">{{ product.description }}</div>{% endif %}
   </div>
 
-  <div class="table-wrap">
-    <table class="data-table">
-      <thead><tr><th style="width:2.2rem">#</th><th>Process</th><th>Sets</th>{% if user.can_manage %}<th class="text-end">Order</th>{% endif %}</tr></thead>
-      <tbody>
-        {% for s in steps %}
-        <tr>
-          <td class="subtle">{{ forloop.counter }}</td>
-          <td class="nowrap">
-            <a class="fw-600" href="?process={{ s.step.pk }}" hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}">{{ s.step.process.code }}</a>
-            <span class="subtle small">{{ s.step.roles.all|length }} role{{ s.step.roles.all|length|pluralize }}</span>
-            {% if s.golden.has_warning %}<span class="badge badge-warning" title="{{ s.golden.warnings|join:'; ' }}"><i class="bi bi-exclamation-triangle"></i> golden sample</span>{% endif %}
-          </td>
-          <td>
-            {% for x in s.sets %}
-            <a href="?set={{ x.set.pk }}" class="set-chip" title="{{ x.readiness.summary }}"
-               hx-get="{% url 'systems:set_panel' x.set.pk %}" hx-target="#panel" hx-push-url="?set={{ x.set.pk }}">
-              <span class="dot {{ x.readiness.dot_class }}"></span><b>#{{ x.set.number }}</b>
-              <span class="subtle">{{ x.set.line.name|default:"" }}</span>
-            </a>
-            {% empty %}<span class="cell-muted">no set</span>{% endfor %}
-          </td>
-          {% if user.can_manage %}
-          <td class="text-end nowrap">
-            <button type="button" class="btn btn-sm btn-ghost btn-icon" title="Move up" {% if forloop.first %}disabled{% endif %}
-                    hx-post="{% url 'systems:process_move' s.step.pk 'up' %}"><i class="bi bi-arrow-up"></i></button>
-            <button type="button" class="btn btn-sm btn-ghost btn-icon" title="Move down" {% if forloop.last %}disabled{% endif %}
-                    hx-post="{% url 'systems:process_move' s.step.pk 'down' %}"><i class="bi bi-arrow-down"></i></button>
-          </td>
-          {% endif %}
-        </tr>
-        {% empty %}
-        <tr><td colspan="4" class="cell-muted">No processes yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  {% comment %}
+    Every process of the route at a glance: where it runs (station, the
+    model's own fixture, ready or not) and its golden samples.
+  {% endcomment %}
+  <div class="route">
+    {% for s in steps %}
+    <div class="route-step">
+      <div class="route-head">
+        <span class="subtle">{{ forloop.counter }}</span>
+        <a class="fw-600" href="?process={{ s.step.pk }}" hx-get="{% url 'systems:process_panel' s.step.pk %}" hx-target="#panel" hx-push-url="?process={{ s.step.pk }}">{{ s.step.process.code }}</a>
+        <span class="subtle small">{{ s.step.process.name }}</span>
+        <span class="spacer"></span>
+        {% if user.can_manage %}
+        <button type="button" class="btn btn-sm btn-ghost btn-icon" title="Move up" {% if forloop.first %}disabled{% endif %}
+                hx-post="{% url 'systems:process_move' s.step.pk 'up' %}"><i class="bi bi-arrow-up"></i></button>
+        <button type="button" class="btn btn-sm btn-ghost btn-icon" title="Move down" {% if forloop.last %}disabled{% endif %}
+                hx-post="{% url 'systems:process_move' s.step.pk 'down' %}"><i class="bi bi-arrow-down"></i></button>
+        {% endif %}
+      </div>
+      {% for x in s.sets %}
+      <div class="route-line">
+        <span class="dot {{ x.readiness.dot_class }}"></span>
+        <span class="route-label">Station</span>
+        {% if x.set.station %}<a class="mono fw-600" href="{% url 'systems:station_detail' x.set.station_id %}">{{ x.set.station }}</a>{% if x.set.is_running %} <span class="badge badge-success" title="Set up on the station now">running</span>{% else %} <span class="badge badge-neutral" title="Its own machines are kept aside until a changeover">kept aside</span>{% endif %}{% else %}<span class="cell-muted">no station</span>{% endif %}
+        <span class="spacer"></span>
+        <a class="badge {{ x.readiness.badge_class }}" href="?set={{ x.set.pk }}" hx-get="{% url 'systems:set_panel' x.set.pk %}" hx-target="#panel" hx-push-url="?set={{ x.set.pk }}" title="{{ x.readiness.summary }}">{{ x.readiness.label }}</a>
+        {% if user.can_record and x.set.station %}<a class="btn btn-ghost btn-icon btn-sm" href="{% url 'systems:station_model_edit' x.set.station_id x.set.pk %}" data-modal-form="{% url 'systems:station_model_edit' x.set.station_id x.set.pk %}" title="Choose its fixture"><i class="bi bi-pencil"></i></a>{% endif %}
+      </div>
+      {% for line in x.own %}
+      <div class="route-line route-sub">
+        <span class="route-label" title="Specific to {{ product.code }}: changes with the model">{% if forloop.first %}Specific{% endif %}</span>
+        <span class="route-own"><span class="subtle small">{{ line.role.name }}</span> {% if line.equipment %}<a class="mono" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.ident }}</a> <span class="subtle">{{ line.equipment.name }}</span>{% else %}<span class="{% if line.is_blocking %}text-danger{% else %}cell-muted{% endif %}">nothing fitted</span>{% endif %}</span>
+      </div>
+      {% endfor %}
+      {% if not x.readiness.is_ready and x.readiness.lines %}<div class="route-why">{{ x.readiness.summary }}</div>{% endif %}
+      {% empty %}
+      <div class="route-line"><span class="cell-muted small">Not run on any station yet — open a station and use Add model.</span></div>
+      {% endfor %}
+      <div class="route-line route-golden">
+        <i class="bi bi-award"></i>
+        <span class="badge {% if s.golden.ok_usable < s.golden.ok_required %}badge-warning{% else %}badge-neutral{% endif %}">OK {{ s.golden.ok_usable }}/{{ s.golden.ok_required }}</span>
+        <span class="badge {% if s.golden.ng_usable < s.golden.ng_required %}badge-warning{% else %}badge-neutral{% endif %}">NG {{ s.golden.ng_usable }}/{{ s.golden.ng_required }}</span>
+        <span class="route-own">{% for sample in s.golden.samples %}<span class="mono">{{ sample.code|truncatechars:22 }}</span> <span class="badge {{ sample.validity_badge_class }}">{{ sample.validity_display }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="cell-muted">no samples</span>{% endfor %}</span>
+        {% if user.can_manage %}<a class="btn btn-ghost btn-icon btn-sm" href="{% url 'systems:golden_create' s.step.pk %}" data-modal-form="{% url 'systems:golden_create' s.step.pk %}" title="Add golden sample"><i class="bi bi-plus-lg"></i></a>{% endif %}
+      </div>
+      {% if s.golden.has_warning %}<div class="route-why">Golden: {{ s.golden.warnings|join:" · " }}</div>{% endif %}
+    </div>
+    {% empty %}
+    <div class="card-body cell-muted">No processes yet.</div>
+    {% endfor %}
   </div>
 
   {% if user.can_manage %}

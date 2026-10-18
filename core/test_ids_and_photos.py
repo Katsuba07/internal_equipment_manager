@@ -13,7 +13,6 @@ from core.models import Role
 from core.test_photos import image_file
 from core.tests import BaseFixtureMixin
 from equipment.models import Equipment
-from equipment.services import import_equipment_from_xlsx
 from inventory.models import InventoryItem
 
 TEMP_MEDIA = tempfile.mkdtemp(prefix="ema-test-media-")
@@ -30,9 +29,9 @@ class IdsAndPhotosTests(BaseFixtureMixin, TestCase):
 
     def data(self, **fields):
         base = {
-            "code": self.equipment.code, "name": self.equipment.name,
+            "code": self.equipment.code, "equipment_no": self.equipment.code, "name": self.equipment.name,
             "category": self.category.pk, "location": self.location.pk,
-            "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
+            "plant": "CTV2", "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0",
             "parts-MIN_NUM_FORMS": "0", "parts-MAX_NUM_FORMS": "1000",
         }
         base.update(fields)
@@ -65,20 +64,6 @@ class IdsAndPhotosTests(BaseFixtureMixin, TestCase):
         body = self.client.get(reverse("equipment:list") + "?q=1032201003").content.decode()
         for text in ("ZT Code", "Equipment No", "Asset No.", "S/N", "103220100359", "41415453WS", self.equipment.code):
             self.assertIn(text, body)
-
-    def test_old_spreadsheets_with_asset_id_still_load(self):
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.append(["Asset ID", "Name", "Category code", "Asset No."])
-        sheet.append(["CTV20200099", "Bench PSU", self.category.code, "103220100600"])
-        buffer = io.BytesIO()
-        workbook.save(buffer)
-        buffer.seek(0)
-        result = import_equipment_from_xlsx(buffer, self.users[Role.MANAGER])
-        self.assertFalse(result.has_errors, result.errors)
-        self.assertEqual(Equipment.objects.get(code="CTV20200099").asset_no, "103220100600")
-
-    # --- photos ------------------------------------------------------------
 
     def test_photos_picked_in_the_edit_dialog_are_attached(self):
         response = self.edit(photos=[image_file("front.png"), image_file("label.jpg", fmt="JPEG")])
@@ -113,7 +98,7 @@ class IdsAndPhotosTests(BaseFixtureMixin, TestCase):
         part = InventoryItem.objects.create(code="PRB-1", name="Probe", unit="pcs")
         self.login(Role.MANAGER)
         self.client.post(reverse("inventory:part_update", args=[part.pk]), {
-            "code": "PRB-1", "name": "Probe", "kind": "PROBE", "unit": "pcs",
+            "code": "PRB-1", "equipment_no": "PRB-1", "name": "Probe", "kind": "PROBE", "unit": "pcs",
             "min_quantity": "0", "is_active": "on", "photos": [image_file()],
         }, **self.hx)
         self.assertEqual(len(part.photos), 1)

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Label {{ equipment.code }}</title>
+  <title>{{ title }}</title>
   <style>
     /* The label stock is set on the page itself (width, height, labels per
        row, gap) and remembered by the browser; everything inside the label
@@ -13,7 +13,7 @@
     body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; background: #e9e9e9; }
     .sheet { display: flex; gap: var(--gap); justify-content: center; margin-top: 10mm; }
     /* flex: none - a label keeps its exact width even when the window is narrow. */
-    .label { flex: none; width: var(--w); height: var(--h); padding: 1mm; background: #fff; overflow: hidden; }
+    .label { flex: none; width: var(--w); height: var(--h); padding: 1mm 2mm 1mm 1mm; background: #fff; overflow: hidden; }
     /* Company name across the top, four lines beneath it, and the QR code
        boxed into the bottom right corner beside the last two lines. */
     .frame {
@@ -34,7 +34,18 @@
     .rows { font-size: var(--font, 1em); }
     .rows b { font-weight: 700; }
     .rows span { min-width: 0; overflow: hidden; white-space: nowrap; }
-    .rows span.beside-qr { margin-right: calc(var(--inner) * 0.41); }
+    .rows span.beside-qr, .rows .row-free.beside-qr { margin-right: calc(var(--inner) * 0.41); }
+    /* The S/N does not line up with the rows above: it starts right after its
+       caption, so a long serial number keeps its room (as it prints). */
+    .rows .row-free { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.3em; min-width: 0; }
+    /* A long serial prints smaller rather than cut; the preview does the same. */
+    .rows .sn-long { font-size: 0.82em; }
+    .rows .sn-xlong { font-size: 0.54em; }
+    /* A long name wraps onto two lines in a smaller size, as it prints. */
+    .rows span.long { white-space: normal; font-size: 0.78em; line-height: 1.05;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .rows-of-labels { display: flex; flex-direction: column; align-items: center; gap: 3mm; }
+    .label-row { display: flex; gap: var(--gap); }
     .qr {
       position: absolute; right: 0; bottom: 0; width: calc(var(--inner) * 0.41); height: 50%;
       padding: 0.5mm; border-left: 0.25mm solid #000; border-top: 0.25mm solid #000;
@@ -54,52 +65,50 @@
       .sheet { margin: 0; justify-content: flex-start; zoom: 1 !important; }
       .label { height: calc(var(--h) - 0.4mm); page-break-inside: avoid; }
       .bar { display: none; }
+      /* Several labels: one roll row per page. */
+      body.many, html:has(body.many) { height: auto; overflow: visible; }
+      body.many .rows-of-labels { gap: 0; align-items: flex-start; }
+      body.many .label-row { page-break-after: always; }
+      body.many .label-row:last-child { page-break-after: auto; }
     }
   </style>
   <style id="page-size"></style>
 </head>
-<body>
-  <div class="sheet" id="sheet">
+<body{% if not repeat %} class="many"{% endif %}>
+  <div class="sheet" id="sheet" data-repeat="{{ repeat|yesno:'1,0' }}">
+    {% for item in items %}{% with equipment=item.equipment %}
     <div class="label">
       <div class="frame">
         <div class="company">{{ company }}</div>
         <div class="body">
           <div class="rows">
             <b>EQ No:</b><span>{{ equipment.equipment_no }}</span>
-            <b>EQ Name:</b><span>{{ equipment.name }}</span>
+            <b>EQ Name:</b><span{% if equipment.name|length > 18 %} class="long"{% endif %}>{{ equipment.name }}</span>
             <b>ZT Code:</b><span class="beside-qr">{{ equipment.code }}</span>
-            <b>S/N:</b><span class="beside-qr">{{ equipment.serial_number }}</span>
+            <div class="row-free beside-qr"><b>S/N:</b><span{% if equipment.serial_number|length > 24 %} class="sn-xlong"{% elif equipment.serial_number|length > 16 %} class="sn-long"{% endif %}>{{ equipment.serial_number }}</span></div>
           </div>
-          <div class="qr">{{ qr_svg|safe }}</div>
+          <div class="qr">{{ item.qr_svg|safe }}</div>
         </div>
       </div>
     </div>
+    {% endwith %}{% endfor %}
   </div>
   <div class="bar">
     <div class="size">
-      <label>Label width <input type="number" id="size-w" min="20" max="200" step="0.5"> mm</label>
-      <label>height <input type="number" id="size-h" min="10" max="200" step="0.5"> mm</label>
-      <label>labels per row <input type="number" id="size-cols" min="1" max="4" step="1"></label>
-      <label>gap between them <input type="number" id="size-gap" min="0" max="20" step="0.5"> mm</label>
-    </div>
-    <div class="size">
-      <label>Shift print right <input type="number" id="size-dx" min="-20" max="20" step="0.5"> mm</label>
-      <label>down <input type="number" id="size-dy" min="-20" max="20" step="0.5"> mm</label>
+      <label>Width <input type="number" id="size-w" min="20" max="200" step="0.5"> mm</label>
+      <label>Height <input type="number" id="size-h" min="10" max="200" step="0.5"> mm</label>
+      <label>Labels per row <input type="number" id="size-cols" min="1" max="4" step="1"></label>
       <label>Text size <input type="number" id="size-font" min="1" max="8" step="0.1" placeholder="auto"> mm</label>
     </div>
-    <button type="button" id="local-print" data-url="{% url 'equipment:label_zpl' equipment.pk %}">Print label</button>
-    {% if printer and user.can_record %}
-    {% csrf_token %}
+    <button type="button" id="local-print" data-url="{{ zpl_url }}"
+            {% if user.can_record %}data-mark-url="{% url 'equipment:mark_labelled' %}" data-ids="{% for item in items %}{{ item.equipment.pk }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}>{% if repeat %}Print label{% else %}Print {{ items|length }} labels{% endif %}</button>
+    {% if user.can_record %}{% csrf_token %}{% endif %}
+    {% if repeat and printer and user.can_record %}
     <button type="button" id="zebra-print" data-url="{% url 'equipment:label_print' equipment.pk %}">Print on {{ printer }}</button>
     {% endif %}
     <button type="button" onclick="window.print()">Print from the browser</button>
     <div class="hint" id="print-result" role="status"></div>
-    <div class="hint">The label above is shown enlarged; it prints at the size entered.</div>
-    <div class="hint">"Print label" sends the label to the Zebra printer connected to this computer, through Zebra Browser Print
-      (install it once on each computer with a label printer). The size above is remembered on this computer.</div>
-    <div class="hint">If the print sits off the label, use the two shift boxes (negative moves it left or up).</div>
-    {% if not equipment.equipment_no %}<div class="hint">This asset has no Equipment No yet, so that line prints empty.</div>{% endif %}
-    {% if equipment.zt_code_pending %}<div class="hint">The ZT Code is still a retired CTV2020… ID; the QR code points to it.</div>{% endif %}
+    {% if repeat and not equipment.code %}<div class="hint">No ZT Code yet: the QR code holds the Equipment No for now.</div>{% endif %}
   </div>
   {{ label_size|json_script:"label-size" }}
   <script>
@@ -109,8 +118,16 @@
       try { Object.assign(size, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) { /* defaults */ }
 
       var sheet = document.getElementById("sheet");
-      var master = sheet.firstElementChild;
-      var inputs = { w: "size-w", h: "size-h", cols: "size-cols", gap: "size-gap", dx: "size-dx", dy: "size-dy", font: "size-font" };
+      var repeat = sheet.getAttribute("data-repeat") === "1";
+      var labels = Array.prototype.slice.call(sheet.children);
+      var master = labels[0];
+      var inputs = { w: "size-w", h: "size-h", cols: "size-cols", font: "size-font" };
+      // Only width, height, labels per row and text size are set here; the gap
+      // and the print offset always come from the configured label stock.
+      var stock = JSON.parse(document.getElementById("label-size").textContent);
+      size.gap = stock.gap;
+      size.dx = stock.dx;
+      size.dy = stock.dy;
 
       function apply() {
         var root = document.documentElement.style;
@@ -118,9 +135,23 @@
         root.setProperty("--h", size.h + "mm");
         root.setProperty("--gap", size.gap + "mm");
         if (size.font) root.setProperty("--font", size.font + "mm"); else root.removeProperty("--font");
-        // One copy of the label for every label across the roll.
-        while (sheet.children.length > 1) sheet.removeChild(sheet.lastChild);
-        for (var i = 1; i < size.cols; i++) sheet.appendChild(master.cloneNode(true));
+        if (repeat) {
+          // One asset: a copy of its label on every label across the roll.
+          while (sheet.children.length > 1) sheet.removeChild(sheet.lastChild);
+          for (var i = 1; i < size.cols; i++) sheet.appendChild(master.cloneNode(true));
+        } else {
+          // Several assets: in order, a row of the roll at a time.
+          sheet.innerHTML = "";
+          var rows = document.createElement("div");
+          rows.className = "rows-of-labels";
+          for (var start = 0; start < labels.length; start += size.cols) {
+            var row = document.createElement("div");
+            row.className = "label-row";
+            labels.slice(start, start + size.cols).forEach(function (label) { row.appendChild(label); });
+            rows.appendChild(row);
+          }
+          sheet.appendChild(rows);
+        }
         var width = size.w * size.cols + size.gap * (size.cols - 1);
         document.getElementById("page-size").textContent =
           "@page { size: " + width + "mm " + size.h + "mm; margin: 0; }";
@@ -149,6 +180,24 @@
 
       var result = document.getElementById("print-result");
 
+      // A label that printed is ticked as labelled, here on the server and in
+      // the list or page this pop-up was opened from.
+      function tellOpener(ids) {
+        if (window.parent !== window && ids && ids.length) {
+          window.parent.postMessage({ type: "ema-labelled", ids: ids }, window.location.origin);
+        }
+      }
+      function markLabelled(button) {
+        if (!button.dataset.markUrl) return Promise.resolve(false);
+        return fetch(button.dataset.markUrl, {
+          method: "POST", body: new URLSearchParams({ ids: button.dataset.ids }),
+          headers: { "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value },
+        })
+          .then(function (response) { return response.ok ? response.json() : null; })
+          .then(function (answer) { if (answer) tellOpener(answer.ids); return !!answer; })
+          .catch(function () { return false; });
+      }
+
       // On the Zebra printer connected to this computer. The server writes the
       // label in ZPL; Zebra Browser Print, a small Zebra program running on
       // this computer, hands it to the printer. It asks once to trust this site.
@@ -158,7 +207,8 @@
         local.disabled = true;
         result.textContent = "Printing…";
         var zpl;
-        fetch(local.dataset.url + "?" + new URLSearchParams(size))
+        var url = local.dataset.url;
+        fetch(url + (url.indexOf("?") === -1 ? "?" : "&") + new URLSearchParams(size))
           .then(function (response) {
             if (!response.ok) throw new Error("server");
             return response.text();
@@ -177,6 +227,9 @@
           .then(function (response) {
             if (!response.ok) throw new Error("write");
             result.textContent = "Sent to the label printer.";
+            return markLabelled(local).then(function (marked) {
+              if (marked) result.textContent = "Sent to the label printer — marked as labelled.";
+            });
           })
           .catch(function (error) {
             result.textContent = {
@@ -200,7 +253,7 @@
           headers: { "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value },
         })
           .then(function (response) { return response.json(); })
-          .then(function (answer) { result.textContent = answer.message; })
+          .then(function (answer) { result.textContent = answer.message; if (answer.ok) tellOpener(answer.ids); })
           .catch(function () { result.textContent = "The label could not be sent — is the app still running?"; })
           .then(function () { button.disabled = false; });
       });

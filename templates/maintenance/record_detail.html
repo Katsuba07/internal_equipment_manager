@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Maintenance {{ record.performed_at|date:"d M Y" }} — {{ record.equipment.code }}{% endblock %}
+{% block title %}Maintenance {{ record.performed_at|date:"d M Y" }} — {{ record.equipment.ident }}{% endblock %}
 
 {% block breadcrumb %}
 <nav class="crumbs no-print">
   <a href="{% url 'equipment:list' %}">Equipment</a><span class="sep">/</span>
-  <a href="{{ record.equipment.get_absolute_url }}" class="mono">{{ record.equipment.code }}</a><span class="sep">/</span>
+  <a href="{{ record.equipment.get_absolute_url }}" class="mono">{{ record.equipment.ident }}</a><span class="sep">/</span>
   <span>Maintenance {{ record.performed_at|date:"d M Y" }}</span>
 </nav>
 {% endblock %}
@@ -18,7 +18,7 @@
       <span class="badge {{ record.result_badge_class }}">{{ record.get_result_display }}</span>
     </div>
     <div class="sub">
-      <a class="mono" href="{{ record.equipment.get_absolute_url }}">{{ record.equipment.code }}</a>
+      <a class="mono" href="{{ record.equipment.get_absolute_url }}">{{ record.equipment.ident }}</a>
       {{ record.equipment.name }} · {{ record.performed_at|date:"d M Y" }}
       {% if record.plan %} · against <span class="mono">{{ record.plan.name }}</span>{% else %} · unplanned{% endif %}
     </div>

@@ -14,7 +14,7 @@
     {% if form.errors %}
     <div class="alert alert-danger">
       <i class="bi bi-exclamation-octagon"></i>
-      <div>That username and password do not match. Please try again.</div>
+      <div>{% if form.non_field_errors.as_data.0.code == "locked" %}{{ form.non_field_errors.0 }}{% else %}That username and password do not match. Please try again.{% endif %}</div>
     </div>
     {% endif %}
 

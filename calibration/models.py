@@ -80,6 +80,10 @@ class CalibrationPlan(DueScheduleMixin, TimeStampedModel):
     )
     last_calibrated_at = models.DateField("Last calibrated", null=True, blank=True)
 
+    # Warn a month ahead (the dashboard and the register count "due within 30
+    # days" too): an instrument has to be booked in and sent out in time.
+    WARNING_DAYS = 30
+
     history = HistoricalRecords(excluded_fields=["created_at", "updated_at"])
 
     class Meta:
@@ -89,15 +93,17 @@ class CalibrationPlan(DueScheduleMixin, TimeStampedModel):
         indexes = [models.Index(fields=["is_active", "next_due_at"])]
 
     def __str__(self) -> str:
-        return f"{self.equipment.code} — {self.name}"
+        return f"{self.equipment.ident} — {self.name}"
 
     def get_absolute_url(self) -> str:
         return reverse("calibration:plan_detail", args=[self.pk])
 
     def save(self, *args, **kwargs):
-        if not self.next_due_at:
-            base = self.last_calibrated_at or timezone.localdate()
-            self.next_due_at = add_months(base, self.interval_months)
+        # The due date follows from the last calibration. Without one, it is
+        # left empty — never guessed from today — so an instrument whose
+        # sticker was lost shows "Calibration date unknown" until it is done.
+        if not self.next_due_at and self.last_calibrated_at:
+            self.next_due_at = add_months(self.last_calibrated_at, self.interval_months)
         super().save(*args, **kwargs)
 
     def mark_done(self, done_date, next_due=None, save: bool = True):
@@ -187,7 +193,7 @@ class CalibrationRecord(AttachmentMixin, TimeStampedModel):
         indexes = [models.Index(fields=["equipment", "-calibrated_at"])]
 
     def __str__(self) -> str:
-        return f"{self.equipment.code} — calibrated {self.calibrated_at:%d %b %Y}"
+        return f"{self.equipment.ident} — calibrated {self.calibrated_at:%d %b %Y}"
 
     def get_absolute_url(self) -> str:
         return reverse("calibration:record_detail", args=[self.pk])

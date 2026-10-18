@@ -23,8 +23,8 @@ class PartsTestBase(BaseFixtureMixin, TestCase):
     def asset_data(self, rows, existing=0, **fields):
         """POST data for the asset form plus its parts formset."""
         data = {
-            "code": "FIX-NEW-001", "name": "New fixture",
-            "category": self.category.pk, "location": self.location.pk,
+            "code": "FIX-NEW-001", "equipment_no": "FIX-NEW-001", "name": "New fixture",
+            "category": self.category.pk, "plant": "CTV2",
             "parts-TOTAL_FORMS": str(len(rows)), "parts-INITIAL_FORMS": str(existing),
             "parts-MIN_NUM_FORMS": "0", "parts-MAX_NUM_FORMS": "1000",
         }
@@ -128,7 +128,7 @@ class PartScreensTests(PartsTestBase):
     def test_create_with_opening_stock(self):
         self.login(Role.MANAGER)
         self.client.post(reverse("inventory:part_create"), {
-            "code": "prb-050-1a", "name": "Probe 50 mil", "kind": "PROBE", "unit": "pcs",
+            "code": "prb-050-1a", "equipment_no": "prb-050-1a", "name": "Probe 50 mil", "kind": "PROBE", "unit": "pcs",
             "min_quantity": "10", "is_active": "on", "opening_stock": "250",
         })
         part = InventoryItem.objects.get(code="PRB-050-1A")
@@ -188,7 +188,7 @@ class PartStatusColumnTests(PartsTestBase):
     def test_list_shows_status_column_not_cell_highlight(self):
         self.login(Role.VIEWER)
         body = self.client.get(reverse("inventory:parts") + "?inactive=1").content.decode()
-        self.assertIn("<th>Status</th>", body)
+        self.assertIn('<option value="">Status</option>', body)      # the column, with its filter as the header
         self.assertIn("Out of stock", body)          # both demo parts start at zero
         self.assertNotIn("cell-danger", body)
 
@@ -402,9 +402,9 @@ class EquipmentSearchTests(PartsTestBase):
         self.assertEqual(rows[0]["code"], self.equipment.code)   # on the parts list, so first
         self.assertIn("DMM-999", [row["code"] for row in rows])
 
-    def test_retired_assets_are_not_offered(self):
+    def test_broken_assets_are_not_offered(self):
         self.login(Role.TECHNICIAN)
-        Equipment.objects.filter(pk=self.other.pk).update(status="RETIRED")
+        Equipment.objects.filter(pk=self.other.pk).update(status="BROKEN")
         self.assertNotIn("DMM-999", [row["code"] for row in self.results(q="DMM")])
 
     def test_signing_in_is_required(self):

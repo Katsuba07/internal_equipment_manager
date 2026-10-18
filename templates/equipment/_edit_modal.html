@@ -2,7 +2,7 @@
 <form method="post" action="{{ request.get_full_path }}" class="quick-add-form modal-wide" enctype="multipart/form-data" novalidate>
   {% csrf_token %}
   <div class="qa-head">
-    <span class="fw-600">Edit asset — <span class="mono">{{ object.code }}</span></span>
+    <span class="fw-600">Edit asset — <span class="mono">{{ object.ident }}</span></span>
     <button type="button" class="btn btn-ghost btn-icon btn-sm" data-qa-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
   </div>
   <div class="qa-body">

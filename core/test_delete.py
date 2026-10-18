@@ -62,7 +62,10 @@ class BulkDeleteTests(DeleteTestBase):
         self.assertContains(self.client.get(reverse("equipment:list")), "data-bulk-all")
         self.assertContains(self.client.get(reverse("inventory:parts")), "data-bulk-all")
         self.login(Role.TECHNICIAN)
-        self.assertNotContains(self.client.get(reverse("equipment:list")), "data-bulk")
+        # Others tick assets too, but only to print their labels.
+        page = self.client.get(reverse("equipment:list"))
+        self.assertContains(page, "data-bulk-labels")
+        self.assertNotContains(page, "data-bulk-delete")
         self.assertNotContains(self.client.get(reverse("inventory:parts")), "data-bulk")
 
     def test_confirm_page_names_what_goes(self):

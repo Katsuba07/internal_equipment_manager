@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="{% static 'css/app.css' %}?v={{ STATIC_VERSION }}">
   <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
 </head>
-<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'{% if user.is_authenticated %} data-photo-stage-url="{% url 'photo_stage' %}"{% endif %}>
 
 {% if user.is_authenticated %}
 <header class="topbar">
@@ -88,7 +88,10 @@
       <a class="nav-link {% if '/parts/' in request.path %}active{% endif %}" href="{% url 'inventory:parts' %}">
         <i class="bi bi-nut"></i> Spare parts
       </a>
-      <a class="nav-link {% if '/products/' in request.path %}active{% endif %}" href="{% url 'systems:products' %}">
+      <a class="nav-link {% if '/products/stations/' in request.path %}active{% endif %}" href="{% url 'systems:stations' %}">
+        <i class="bi bi-diagram-3"></i> Stations
+      </a>
+      <a class="nav-link {% if '/products/' in request.path and '/products/stations/' not in request.path %}active{% endif %}" href="{% url 'systems:products' %}">
         <i class="bi bi-box-seam"></i> Products
       </a>
 

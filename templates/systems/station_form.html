@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}{% if station.pk %}{{ station }}{% else %}New station{% endif %} — {{ APP_NAME }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs">
+  <a href="{% url 'systems:products' %}">Products</a><span class="sep">/</span>
+  <a href="{% url 'systems:stations' %}">Stations</a><span class="sep">/</span>
+  <span>{% if station.pk %}{{ station }}{% else %}New{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:760px">
+  <div class="page-head">
+    <div><h1>{% if station.pk %}Station {{ station }}{% else %}New station{% endif %}</h1></div>
+    {% if station.pk and user.is_admin %}
+    <div class="actions"><a href="{% url 'systems:station_delete' station.pk %}" class="btn btn-danger"><i class="bi bi-trash"></i> Delete</a></div>
+    {% endif %}
+  </div>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% include "systems/_station_form_fields.html" %}
+    <div class="row-flex mt-2">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+      <a href="{% if station.pk %}{% url 'systems:station_detail' station.pk %}{% else %}{% url 'systems:stations' %}{% endif %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

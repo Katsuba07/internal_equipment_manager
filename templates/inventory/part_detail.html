@@ -56,7 +56,7 @@
           <tbody>
             {% for line in used_in %}
             <tr>
-              <td class="nowrap"><a class="mono fw-600" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.code }}</a>
+              <td class="nowrap"><a class="mono fw-600" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.ident }}</a>
                 <span class="subtle">{{ line.equipment.name }}</span></td>
               <td class="subtle">{{ line.equipment.location.name|default:"—" }}</td>
               <td class="text-end">{{ line.quantity|floatformat:"-2" }}</td>
@@ -82,7 +82,7 @@
               <td>{{ move.get_transaction_type_display }}</td>
               <td class="text-end">{% if move.transaction_type == "OUT" %}−{% elif move.transaction_type == "IN" %}+{% endif %}{{ move.quantity|floatformat:"-2" }}</td>
               <td class="text-end">{{ move.quantity_after|floatformat:"-2" }}</td>
-              <td class="nowrap">{% if move.equipment %}<a class="mono" href="{{ move.equipment.get_absolute_url }}">{{ move.equipment.code }}</a> <span class="subtle">{{ move.equipment.name }}</span>{% else %}<span class="subtle">—</span>{% endif %}</td>
+              <td class="nowrap">{% if move.equipment %}<a class="mono" href="{{ move.equipment.get_absolute_url }}">{{ move.equipment.ident }}</a> <span class="subtle">{{ move.equipment.name }}</span>{% else %}<span class="subtle">—</span>{% endif %}</td>
               <td>{{ move.reason }}</td>
               <td class="subtle nowrap">{{ move.performed_by.get_short_name|default:"" }}</td>
               {% if user.can_manage or user.is_admin %}

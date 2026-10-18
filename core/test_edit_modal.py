@@ -18,9 +18,9 @@ class EditDialogTests(BaseFixtureMixin, TestCase):
 
     def asset_data(self, **fields):
         data = {
-            "code": self.equipment.code, "name": self.equipment.name,
+            "code": self.equipment.code, "equipment_no": self.equipment.code, "name": self.equipment.name,
             "category": self.category.pk, "location": self.location.pk,
-            "parts-TOTAL_FORMS": "1", "parts-INITIAL_FORMS": "0",
+            "plant": "CTV2", "parts-TOTAL_FORMS": "1", "parts-INITIAL_FORMS": "0",
             "parts-MIN_NUM_FORMS": "0", "parts-MAX_NUM_FORMS": "1000",
             "parts-0-item": self.part.pk, "parts-0-quantity": "12", "parts-0-notes": "",
         }
@@ -42,16 +42,16 @@ class EditDialogTests(BaseFixtureMixin, TestCase):
         )
         self.assertEqual(response.json(), {"reload": True, "message": ""})
         self.equipment.refresh_from_db()
-        self.assertEqual(self.equipment.name, "Renamed fixture")
+        self.assertEqual(self.equipment.name, "RENAMED FIXTURE")   # names are kept in capitals
         self.assertTrue(EquipmentPart.objects.filter(equipment=self.equipment, item=self.part).exists())
 
     def test_mistakes_stay_in_the_dialog(self):
         self.login(Role.MANAGER)
         response = self.client.post(
-            reverse("equipment:update", args=[self.equipment.pk]), self.asset_data(name=""), **self.hx,
+            reverse("equipment:update", args=[self.equipment.pk]), self.asset_data(equipment_no=""), **self.hx,
         )
         self.assertContains(response, "Edit asset —")
-        self.assertContains(response, "This field is required")
+        self.assertContains(response, "Give the asset its Equipment No")
         self.assertNotContains(response, "<html")
 
     def test_the_page_still_works_on_its_own(self):
@@ -66,7 +66,7 @@ class EditDialogTests(BaseFixtureMixin, TestCase):
         url = reverse("inventory:part_update", args=[self.part.pk])
         self.assertContains(self.client.get(url, **self.hx), "Edit part —")
         response = self.client.post(url, {
-            "code": "PRB-100", "name": "Spring probe", "kind": "PROBE", "unit": "pcs",
+            "code": "PRB-100", "equipment_no": "PRB-100", "name": "Spring probe", "kind": "PROBE", "unit": "pcs",
             "min_quantity": "10", "is_active": "on",
         }, **self.hx)
         self.assertEqual(response.json()["reload"], True)

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ test_set.product.code }} on {{ station }} — {{ APP_NAME }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs">
+  <a href="{% url 'systems:stations' %}">Stations</a><span class="sep">/</span>
+  <a class="mono" href="{% url 'systems:station_detail' station.pk %}">{{ station }}</a><span class="sep">/</span>
+  <span class="mono">{{ test_set.product.code }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:820px">
+  <div class="page-head">
+    <div><h1><span class="mono">{{ test_set.product.code }}</span> on <span class="mono">{{ station }}</span></h1><div class="sub">{{ test_set }}</div></div>
+  </div>
+  {% if error %}<div class="alert alert-danger"><i class="bi bi-exclamation-octagon"></i><div>{{ error }}</div></div>{% endif %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-head"><i class="bi bi-box-seam"></i> What this model brings</div>
+      <div class="setup-rows">
+        {% for row in rows %}
+        <div class="setup-row" data-qa-scope>
+          <div class="setup-role"><span class="fw-600">{{ row.slot.name }}</span>{% if not row.slot.is_required %} <span class="badge badge-neutral">optional</span>{% endif %}</div>
+          <div class="setup-eq">
+            {% include "core/_asset_picker.html" with name=row.name chosen=row.chosen input_id=row.input_id source=row.source empty_text=row.empty_text %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="card-body cell-muted">The station lists nothing a model brings. Add items in Edit station (for example its fixture).</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="row-flex mt-2">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+      <a href="{% url 'systems:station_detail' station.pk %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+  <div class="card mt-2">
+    <div class="card-head"><i class="bi bi-hdd-stack"></i> Shared by the station <span class="badge badge-neutral">{{ shared|length }}</span></div>
+    <div class="card-body">{% for asset in shared %}<a class="cell-tag" href="{{ asset.get_absolute_url }}" title="{{ asset.category.name }} · {{ asset.name }}">{{ asset.ident }}</a>{% empty %}<span class="cell-muted">None</span>{% endfor %}</div>
+  </div>
+</div>
+{% endblock %}

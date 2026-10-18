@@ -1,0 +1,30 @@
+{% comment %}
+  One machine as a row: photo, ZT code and name, then what tells it apart on
+  the floor (Equipment No, S/N, make and model) and whether it can be used.
+  Expects ``card`` from systems.views.machine_card; ``compact`` drops the
+  make/model line (the preview drawer).
+{% endcomment %}
+{% with asset=card.asset %}
+<div class="machine{% if card.problem %} machine-bad{% endif %}">
+  {% if card.photo %}<a class="machine-photo" href="{{ card.photo.file.url }}" data-lightbox title="{{ asset.ident }}"><img src="{% if card.photo.thumbnail %}{{ card.photo.thumbnail.url }}{% else %}{{ card.photo.file.url }}{% endif %}" alt=""></a>
+  {% else %}<span class="machine-photo machine-nophoto" title="No photo"><i class="bi bi-image"></i></span>{% endif %}
+  <div class="machine-main">
+    <div class="machine-title"><a class="mono fw-600" href="{{ asset.get_absolute_url }}">{{ asset.ident }}</a> <span>{{ asset.name }}</span></div>
+    <div class="machine-meta">
+      {% if card.model %}<span class="badge badge-primary" title="Belongs to this model; mounted while it runs">{{ card.model }}'s own</span>{% endif %}
+      <span>{{ asset.category.name }}</span>
+      {% if asset.equipment_no %}<span class="mono">{{ asset.equipment_no }}</span>{% endif %}
+      {% if asset.serial_number %}<span>S/N <span class="mono">{{ asset.serial_number }}</span></span>{% endif %}
+      {% if not compact and asset.manufacturer or not compact and asset.model_number %}<span>{{ asset.manufacturer }} {{ asset.model_number }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="machine-side">
+    {% if card.problem %}<span class="badge badge-danger">{{ card.problem }}</span>
+    {% else %}
+      {% if card.calibration %}<span class="badge {{ card.calibration.due_badge_class }}" title="Calibration due {{ card.calibration.next_due_at|date:'d M Y' }}"><i class="bi bi-rulers"></i> {{ card.calibration.due_display }}</span>{% endif %}
+      {% if card.maintenance %}<span class="badge {{ card.maintenance.due_badge_class }}" title="{{ card.maintenance.name }} due {{ card.maintenance.next_due_at|date:'d M Y' }}"><i class="bi bi-wrench"></i> {{ card.maintenance.due_display }}</span>{% endif %}
+      {% if not card.calibration and not card.maintenance %}<span class="badge badge-success">OK</span>{% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endwith %}

@@ -70,7 +70,7 @@ def _history_events(model, limit, kind):
                 text = ", ".join(label[:1].upper() + label[1:] for label in labels)
         url = reverse(DETAIL_URLS[model], args=[record.id]) if record.id in alive and record.history_type != "-" else None
         events.append({
-            "when": record.history_date, "who": record.history_user, "code": record.code, "url": url,
+            "when": record.history_date, "who": record.history_user, "code": getattr(record, "equipment_no", "") or record.code, "url": url,
             "tag": tag, "badge": badge, "text": text, "kind": kind,
         })
         if len(events) >= limit:
@@ -88,7 +88,7 @@ def recent_activity(limit=40, kinds=None):
         changes = StatusHistory.objects.exclude(from_status="")   # the first one is the "Added" row
         for change in changes.select_related("equipment", "changed_by").order_by("-created_at")[:limit]:
             events.append({
-                "when": change.created_at, "who": change.changed_by, "code": change.equipment.code,
+                "when": change.created_at, "who": change.changed_by, "code": change.equipment.ident,
                 "url": change.equipment.get_absolute_url(), "kind": "equipment",
                 "badge": change.to_status_badge_class, "tag": change.get_to_status_display(),
                 "text": change.reason,
@@ -101,13 +101,13 @@ def recent_activity(limit=40, kinds=None):
         )
         for inst in fits.order_by("-installed_at")[:limit]:
             events.append({
-                "when": inst.installed_at, "who": inst.installed_by, "code": inst.component.code,
+                "when": inst.installed_at, "who": inst.installed_by, "code": inst.component.ident,
                 "url": inst.component.get_absolute_url(), "kind": "set",
                 "badge": "badge-primary", "tag": "Fitted", "text": f"in {inst.where}",
             })
         for inst in fits.filter(removed_at__isnull=False).order_by("-removed_at")[:limit]:
             events.append({
-                "when": inst.removed_at, "who": inst.removed_by, "code": inst.component.code,
+                "when": inst.removed_at, "who": inst.removed_by, "code": inst.component.ident,
                 "url": inst.component.get_absolute_url(), "kind": "set",
                 "badge": "badge-neutral", "tag": "Removed", "text": f"from {inst.where}",
             })
@@ -119,7 +119,7 @@ def recent_activity(limit=40, kinds=None):
             tag, badge = STOCK_TAGS.get(move.transaction_type, ("Moved", "badge-neutral"))
             text = f"{_number(move.quantity)} {move.item.unit or ''}".strip()
             if move.equipment_id:
-                text += f" to {move.equipment.code}"
+                text += f" to {move.equipment.ident}"
             text += f" · balance {_number(move.quantity_after)}"
             if move.reason:
                 text += f" · {move.reason}"
@@ -132,19 +132,19 @@ def recent_activity(limit=40, kinds=None):
     if "record" in want:
         for record in MaintenanceRecord.objects.select_related("equipment", "performed_by").order_by("-created_at")[:limit]:
             events.append({
-                "when": record.created_at, "who": record.performed_by, "code": record.equipment.code,
+                "when": record.created_at, "who": record.performed_by, "code": record.equipment.ident,
                 "url": record.get_absolute_url(), "kind": "record",
                 "tag": "Maintenance", "badge": "badge-info", "text": record.work_done,
             })
         for record in CalibrationRecord.objects.select_related("equipment", "performed_by").order_by("-created_at")[:limit]:
             events.append({
-                "when": record.created_at, "who": record.performed_by, "code": record.equipment.code,
+                "when": record.created_at, "who": record.performed_by, "code": record.equipment.ident,
                 "url": record.get_absolute_url(), "kind": "record",
                 "tag": "Calibrated", "badge": "badge-info", "text": record.get_result_display(),
             })
         for report in IncidentReport.objects.select_related("equipment", "reported_by").order_by("-created_at")[:limit]:
             events.append({
-                "when": report.created_at, "who": report.reported_by, "code": report.equipment.code,
+                "when": report.created_at, "who": report.reported_by, "code": report.equipment.ident,
                 "url": report.get_absolute_url(), "kind": "record",
                 "tag": "Incident", "badge": "badge-danger", "text": report.title,
             })

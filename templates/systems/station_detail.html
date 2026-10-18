@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{{ station }} — {{ APP_NAME }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="crumbs"><a href="{% url 'systems:stations' %}">Stations</a><span class="sep">/</span><span class="mono">{{ station }}</span></nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="mono">{{ station }}</h1>
+    <div class="sub">{% if station.customer %}{{ station.customer.name }} · {% endif %}{{ station.process.name }}{% if station.line %} · {{ station.line.name }}{% endif %}{% if station.notes %} · {{ station.notes }}{% endif %}</div>
+  </div>
+  <div class="actions no-print">
+    {% if user.can_manage %}<a href="{% url 'systems:station_edit' station.pk %}" class="btn btn-default" data-modal-form="{% url 'systems:station_edit' station.pk %}"><i class="bi bi-pencil"></i> Edit station</a>{% endif %}
+  </div>
+</div>
+
+{% comment %}What is physically on the station now: the shared machines, and the running model's own (its fixture).{% endcomment %}
+<div class="card station-now">
+  <div class="card-head">
+    <i class="bi bi-hdd-stack"></i> On the station now
+    <span class="badge badge-neutral">{{ on_station_count }}</span>
+    <span class="spacer"></span>
+    {% if running %}
+    <span class="running-tag"><i class="bi bi-play-circle-fill"></i> Running <a class="mono fw-600" href="{% url 'systems:products' %}?set={{ running.set.pk }}">{{ running.set.product.code }}</a>{% if station.running_since %} <span class="subtle small">since {{ station.running_since|date:"d M Y H:i" }}</span>{% endif %}</span>
+    <span class="badge {{ running.readiness.badge_class }}" title="{{ running.readiness.summary }}">{{ running.readiness.label }}</span>
+    {% elif models %}
+    <span class="badge badge-warning">No model running — pick one below</span>
+    {% endif %}
+  </div>
+  {% if held or mounted %}
+  <div class="machines machines-grid">
+    {% for card in mounted %}{% include "systems/_machine.html" %}{% endfor %}
+    {% for card in held %}{% include "systems/_machine.html" %}{% endfor %}
+  </div>
+  {% else %}
+  <div class="card-body cell-muted">Nothing on it yet. Add its shared machines in Edit station, and its models below.</div>
+  {% endif %}
+  {% if running and not mounted and running.readiness.lines %}
+  <div class="card-body small subtle">{{ running.set.product.code }} has none of its own machines chosen yet.</div>
+  {% endif %}
+</div>
+
+<div class="card mt-2">
+  <div class="card-head">
+    <i class="bi bi-box-seam"></i> Models and their own machines <span class="badge badge-neutral">{{ models|length }}</span>
+    <span class="spacer"></span>
+    {% if user.can_manage %}
+    <a href="{% url 'systems:station_add_model' station.pk %}" class="btn btn-primary btn-sm no-print" data-modal-form="{% url 'systems:station_add_model' station.pk %}"><i class="bi bi-plus-lg"></i> Add model</a>
+    {% endif %}
+  </div>
+  {% if models %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Model</th><th>Its own machines</th><th>On the station</th><th>State</th>{% if user.can_record %}<th></th>{% endif %}</tr></thead>
+      <tbody>
+        {% for row in models %}
+        <tr{% if row.running %} class="row-running"{% endif %}>
+          <td class="nowrap"><a class="mono fw-600" href="{% url 'systems:products' %}?set={{ row.set.pk }}">{{ row.set.product.code }}</a> <span class="subtle small">#{{ row.set.number }}</span></td>
+          <td>
+            <div class="own-machines">
+            {% for line in row.own %}
+            {% with photo=line.equipment.main_photo %}
+            <span class="own-machine" title="{{ line.role.name }}">
+              {% if photo %}<a class="machine-photo machine-photo-sm" href="{{ photo.file.url }}" data-lightbox><img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt=""></a>{% else %}<span class="machine-photo machine-photo-sm machine-nophoto"><i class="bi bi-image"></i></span>{% endif %}
+              <span><a class="mono fw-600" href="{{ line.equipment.get_absolute_url }}">{{ line.equipment.ident }}</a> <span class="subtle">{{ line.equipment.name }}</span>{% if line.equipment.serial_number %} <span class="subtle small">· S/N <span class="mono">{{ line.equipment.serial_number }}</span></span>{% endif %}</span>
+            </span>
+            {% endwith %}
+            {% empty %}<span class="cell-muted">none chosen yet</span>{% endfor %}
+            </div>
+          </td>
+          <td class="nowrap">
+            {% if row.running %}<span class="badge badge-success"><i class="bi bi-play-circle-fill"></i> Running · mounted</span>
+            {% else %}<span class="badge badge-neutral" title="Its own machines are kept aside until a changeover">Kept aside</span>{% endif %}
+          </td>
+          <td><span class="badge {{ row.readiness.badge_class }}" title="{{ row.readiness.summary }}">{{ row.readiness.label }}</span>{% if not row.readiness.is_ready and row.readiness.lines %} <span class="subtle small">{{ row.readiness.summary }}</span>{% endif %}</td>
+          {% if user.can_record %}
+          <td class="nowrap text-end no-print">
+            {% if not row.running %}
+            <form method="post" action="{% url 'systems:station_changeover' station.pk row.set.pk %}" style="display:inline" data-confirm="Change {{ station }} over to {{ row.set.product.code }}? Mount its own machines{% for line in row.own %} {{ line.equipment.ident }}{% endfor %} and take the others off.">
+              {% csrf_token %}<button type="submit" class="btn btn-default btn-sm" title="Set this model up on the station: its own machines become the mounted ones"><i class="bi bi-arrow-repeat"></i> Changeover</button>
+            </form>
+            {% endif %}
+            <a class="btn btn-ghost btn-icon btn-sm" href="{% url 'systems:station_model_edit' station.pk row.set.pk %}" data-modal-form="{% url 'systems:station_model_edit' station.pk row.set.pk %}" title="Choose its fixture and own machines"><i class="bi bi-pencil"></i></a>
+            {% if user.can_manage %}
+            <form method="post" action="{% url 'systems:station_remove_model' station.pk row.set.pk %}" style="display:inline" data-confirm="Stop running {{ row.set.product.code }} on {{ station }}? It keeps its own machines.">
+              {% csrf_token %}<button type="submit" class="btn btn-ghost btn-icon btn-sm" title="Stop running it on this station (it keeps its own machines)"><i class="bi bi-x-lg"></i></button>
+            </form>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body cell-muted">No model runs on it yet. {% if user.can_manage %}Use Add model: choose the model and its fixture in one go.{% endif %}</div>
+  {% endif %}
+</div>
+
+{% if changeovers %}
+<div class="card mt-2">
+  <div class="card-head"><i class="bi bi-clock-history"></i> Changeovers</div>
+  <div class="rows">
+    {% for entry in changeovers %}
+    <div class="row-item">
+      <span class="dot dot-info"></span>
+      <div class="row-main">
+        <div class="row-title">{{ entry.from_label|default:"nothing" }} <i class="bi bi-arrow-right"></i> <span class="fw-600">{{ entry.to_label|default:"nothing" }}</span></div>
+        {% if entry.note %}<div class="row-sub">{{ entry.note }}</div>{% endif %}
+      </div>
+      <div class="row-side subtle small">{{ entry.created_at|date:"d M Y H:i" }}{% if entry.changed_by %} · {{ entry.changed_by.get_full_name|default:entry.changed_by.username }}{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

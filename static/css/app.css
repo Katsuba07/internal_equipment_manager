@@ -1569,10 +1569,17 @@ tr.row-ticked > td { background: var(--danger-soft); }
 .form-photo:has(input:checked) img { opacity: 0.35; outline: 2px solid var(--danger); }
 .form-photo:has(input:checked) .form-photo-gone { display: block; }
 .form-photo:has(input:checked) .form-photo-x { background: var(--danger); }
+/* A photo sent ahead of its form: sending, sent, or failed (tap to retry). */
 .photo-stage-item::after {
-  content: "new"; position: absolute; left: 2px; bottom: 2px; padding: 0 3px;
-  background: var(--success); color: #fff; font-size: 0.6rem;
+  position: absolute; left: 2px; bottom: 2px; padding: 0 3px;
+  color: #fff; font-size: 0.6rem; line-height: 1.4;
 }
+.photo-stage-item.is-sending img { opacity: 0.5; }
+.photo-stage-item.is-sending::after { content: "sending…"; background: var(--info); }
+.photo-stage-item.is-done::after { content: "✓ sent"; background: var(--success); }
+.photo-stage-item.is-failed img { opacity: 0.5; outline: 2px solid var(--danger); }
+.photo-stage-item.is-failed::after { content: "failed · retry"; background: var(--danger); }
+.photo-stage-note { color: var(--warning); font-size: 0.88rem; margin: 0.3rem 0; }
 
 /* A schedule field waiting for its tick. */
 .is-shut { opacity: 0.45; }
@@ -1667,3 +1674,236 @@ tr.row-ticked > td { background: var(--danger-soft); }
 .doc-tab-count { font-size: 0.75rem; color: var(--text-subtle); }
 .doc-pane { padding: 0.25rem 0; }
 
+
+
+/* ---------- One line wherever it fits ----------
+   The interface is kept to the minimum: what can share a line does. These
+   rules come last on purpose and override the stacked layouts above. */
+
+/* No hint text under inputs; the label is the explanation. */
+.form-text, .helptext { display: none; }
+
+/* Page title, its badges and its subtitle on one line. */
+.page-head > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.7rem; }
+.page-head > div:first-child > .row-flex { margin-bottom: 0; }
+.page-head h1 { margin-bottom: 0; }
+
+/* List rows: the ID and the name side by side. */
+.cell-id { display: inline; }
+.cell-sub { display: inline; margin-left: 0.6rem; }
+
+/* Overview figures: label, number and note in a row. */
+.stat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.5rem; padding: 0.3rem 0.55rem; }
+.stat .value { margin-top: 0; font-size: 1.15rem; line-height: 1.3; }
+
+/* Rows in cards: title and detail together, badge and date together. */
+.row-main { display: flex; align-items: baseline; gap: 0.6rem; }
+.row-title { flex: none; max-width: 60%; }
+.row-sub { min-width: 0; }
+.row-side { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Details: "Label  value" instead of a label above its value. */
+.defs { grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 0.25rem 1.2rem; }
+.defs > div { display: flex; align-items: baseline; gap: 0.5rem; }
+.defs .k { flex: none; min-width: 7.2rem; }
+.defs .v { margin-top: 0; }
+
+/* Empty states take one line, not a block. */
+.empty {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 0.15rem 0.5rem; padding: 0.45rem 0.8rem;
+}
+.empty i { font-size: 1rem; }
+.empty .title, .empty .desc { margin-top: 0; }
+.empty .title { font-weight: 500; color: var(--text-muted); }
+.empty .actions { margin-top: 0; }
+.defs .v.empty { display: block; }
+
+/* A status change: what, why and who on its line. */
+.tl-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.6rem; padding-bottom: 0.35rem; }
+.tl-head { order: 1; }
+.tl-body, .tl-who { order: 2; margin-top: 0; }
+.tl-time { order: 3; }
+.tl-head .tl-time { margin-left: 0.3rem; }
+
+/* Overview figures (the tiles): label, number and note in a row. */
+.tile { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.5rem; padding: 0.3rem 0.6rem; }
+.tile .t-value { font-size: 1.15rem; line-height: 1.3; }
+.tile .t-foot { margin-left: auto; }
+
+/* Activity rows keep the text filling the row and the time at its end. */
+.row-main.row-title { display: block; flex: 1 1 auto; max-width: none; }
+
+/* Process panel: a role and the machine fitted to it share a line. */
+.setup-row:has(> .setup-eq) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: center; gap: 0.3rem 0.6rem; padding: 0.3rem 0.75rem; }
+.setup-row > .invalid-feedback { grid-column: 1 / -1; }
+.picker-chosen { padding-top: 0.2rem; padding-bottom: 0.2rem; }
+@media (max-width: 1100px) { .setup-row:has(> .setup-eq) { grid-template-columns: minmax(0, 1fr); } }
+
+
+/* ---------- Filters in the column headers ----------
+   A filter replaces its column's title: the empty choice is the title, and a
+   chosen value shows in the accent colour. */
+.th-filter-wrap { display: inline-flex; align-items: center; gap: 0.15rem; max-width: 100%; }
+select.th-filter {
+  appearance: auto; min-width: 0; max-width: 11rem; padding: 0 0.1rem; margin: -0.1rem 0 -0.1rem -0.25rem;
+  border: 1px solid transparent; background: transparent; color: inherit;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+select.th-filter:hover, select.th-filter:focus { border-color: var(--border-strong); background: var(--surface); }
+select.th-filter:has(option:checked:not([value=""])) { color: var(--accent); border-color: var(--accent); background: var(--surface); }
+.th-sort { flex: none; font-size: 0.8em; opacity: 0.55; }
+.th-sort:hover { opacity: 1; }
+@media print { select.th-filter { appearance: none; border: 0; } .th-sort { display: none; } }
+/* A header filter is as wide as what it shows, never squeezed by its column. */
+.th-filter-wrap { white-space: nowrap; }
+select.th-filter { flex: none; field-sizing: content; max-width: 12rem; }
+.cell-id { white-space: nowrap; }
+/* A long name is cut with an ellipsis rather than pushing columns off the page. */
+.data-table td:has(> .cell-id) { max-width: 21rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+select.th-filter { max-width: 9.5rem; }
+
+/* ---------- Stations ---------- */
+.station-tag {
+  display: inline-block; font-size: 0.75rem; padding: 0 0.35rem; margin-left: 0.3rem;
+  border: 1px dashed var(--border-strong); color: var(--text-muted); white-space: nowrap;
+}
+.setup-eq.from-station { display: flex; align-items: center; gap: 0.3rem; }
+.setup-eq.from-station .picker { flex: 1; min-width: 0; }
+.setup-eq.from-station .picker-chosen { border-style: dashed; background: transparent; }
+.setup-line-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.6rem; }
+.station-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0 0.6rem; }
+.station-assets { display: grid; gap: 0.35rem; }
+.station-add .form-select { width: auto; min-width: 14rem; padding-top: 0.15rem; padding-bottom: 0.15rem; }
+.cell-tag .dot { display: inline-block; vertical-align: middle; margin-right: 0.15rem; }
+
+/* A machine, recognisable at a glance: photo, IDs, make/model, due dates. */
+.machines { display: grid; }
+.machines-grid { grid-template-columns: repeat(auto-fill, minmax(min(30rem, 100%), 1fr)); }
+.machine { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border-light); min-width: 0; }
+.machine-bad { box-shadow: inset 3px 0 0 var(--danger); }
+.machine-photo {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 3.6rem; height: 3.6rem;
+  border: 1px solid var(--border); background: var(--surface-2); overflow: hidden; color: var(--text-subtle);
+}
+.machine-photo img { width: 100%; height: 100%; object-fit: cover; }
+.machine-photo-sm { width: 2.4rem; height: 2.4rem; }
+.machine-main { flex: 1; min-width: 0; }
+.machine-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.machine-meta { display: flex; flex-wrap: wrap; gap: 0 0.7rem; font-size: 0.82rem; color: var(--text-muted); }
+.machine-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 0.15rem; }
+.own-machines { display: grid; gap: 0.25rem; }
+.own-machine { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+.pv-model { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem; padding: 0.25rem 0; border-bottom: 1px solid var(--border-light); }
+.pv-model .badge { margin-left: auto; }
+
+/* Process panel: the sets that run the process, one line each. */
+.process-sets { display: grid; }
+.process-set { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.75rem; border-bottom: 1px solid var(--border-light); min-width: 0; }
+.process-set-own { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setup-head a.small { margin-left: auto; font-weight: 400; }
+
+/* Equipment No: last number of the type and the next one, under the field. */
+.next-no { margin-top: 0.15rem; font-size: 0.8rem; color: var(--text-muted); min-height: 1.1rem; }
+.next-no-use { font: inherit; padding: 0 0.35rem; margin-left: 0.2rem; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; }
+.next-no-use:hover { background: var(--accent-soft); }
+
+/* A page shown in a pop-up (label printing). */
+dialog.frame-dialog {
+  width: min(980px, calc(100vw - 32px)); height: min(720px, calc(100vh - 48px));
+  padding: 0; border: 1px solid var(--border-strong); background: var(--surface);
+  display: flex; flex-direction: column;
+}
+dialog.frame-dialog:not([open]) { display: none; }
+dialog.frame-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+dialog.frame-dialog .qa-head { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+dialog.frame-dialog iframe { flex: 1; width: 100%; border: 0; background: #e9e9e9; }
+
+/* A product's route: each process with where it runs and its golden samples. */
+.route { display: grid; }
+.route-step { border-bottom: 1px solid var(--border); }
+.route-head { display: flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.75rem; background: var(--surface-2); }
+.route-head .spacer { margin-left: auto; }
+.route-line { display: flex; align-items: center; gap: 0.45rem; padding: 0.25rem 0.75rem 0.25rem 1.6rem; min-width: 0; font-size: 0.88rem; }
+.route-own { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-golden .bi-award { color: var(--text-muted); }
+.route-why { padding: 0 0.75rem 0.3rem 2.6rem; font-size: 0.8rem; color: var(--danger); }
+
+/* Lists with filters in their headers keep fixed column widths: filtering or
+   searching changes the rows, never the layout. A long value is cut with an
+   ellipsis (its full text is in the preview); .wrap cells may wrap instead. */
+/* The free column (the ID and name) gets what the fixed ones leave over; the
+   table's --table-min keeps that from reaching nothing on a phone, where the
+   table scrolls sideways instead. */
+table.fixed-cols { table-layout: fixed; width: max(100%, var(--table-min, 0px)); }
+table.fixed-cols th, table.fixed-cols td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.fixed-cols td.wrap { white-space: normal; }
+table.fixed-cols select.th-filter { max-width: 100%; field-sizing: fixed; width: calc(100% - 1rem); }
+table.fixed-cols .th-filter-wrap { display: flex; width: 100%; }
+table.fixed-cols td:has(> .cell-id) { max-width: none; }
+.route-line .spacer { margin-left: auto; }
+.route-label { flex: none; width: 4.6rem; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.route-sub { padding-top: 0.05rem; padding-bottom: 0.05rem; }
+.route-sub .route-label { padding-left: 0.95rem; width: 5.55rem; }
+.text-danger { color: var(--danger) !important; }
+
+/* "Labelled" tick: on the asset form beside Usage, and in the list's Label column. */
+.field-grid .tick-field { padding-top: 1.6rem; }
+.label-tick { width: 1.05rem; height: 1.05rem; cursor: pointer; accent-color: var(--success); }
+.label-tick:disabled { cursor: default; }
+
+/* Identifying fields are saved in capitals; they show that way as typed. */
+.text-upper { text-transform: uppercase; }
+.text-upper::placeholder { text-transform: none; }
+
+/* Column widths dragged by hand (app.js): a grip on each heading's right edge. */
+table.fixed-cols thead th { overflow: visible; }
+table.fixed-cols thead th > a, table.fixed-cols thead th > .th-filter-wrap { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-resize {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 8px; z-index: 2;
+  cursor: col-resize; touch-action: none;
+}
+.col-resize:hover, table.is-resizing .col-resize:active { background: var(--accent); opacity: 0.35; }
+table.is-resizing, table.is-resizing * { cursor: col-resize !important; user-select: none; }
+
+/* The page's own "are you sure" (app.js): unlike the browser's confirm(), it
+   cannot be switched off by the user. */
+dialog.confirm-dialog {
+  width: min(440px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+dialog.confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.confirm-body { display: flex; gap: 0.7rem; padding: 1rem 1rem 0.4rem; }
+.confirm-body > .bi { color: var(--warning); font-size: 1.5rem; line-height: 1; }
+.confirm-text p { margin: 0 0 0.6rem; }
+.confirm-text p:first-child { font-weight: 600; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.6rem 1rem 1rem; }
+.btn-warning { background: var(--warning); border-color: var(--warning); color: #fff; font-weight: 600; }
+.btn-warning:hover { filter: brightness(0.95); color: #fff; }
+.calibration-confirm { margin: 0.6rem 0 0; }
+
+/* A shared machine on the station form: its search box, then a bin to take the row out. */
+.station-asset { display: flex; align-items: flex-start; gap: 0.35rem; }
+.station-asset > .grow { flex: 1; min-width: 0; }
+.station-assets:empty { display: none; }
+
+/* Last and due dates of calibration and maintenance, beside where they stand. */
+.sched-dates { margin-left: 0.3rem; color: var(--text-muted); font-size: 0.9em; }
+.sched-dates b { color: var(--text); font-weight: 600; }
+
+/* The model set up on a station right now, and its row in the models table. */
+.running-tag { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--success); font-size: 0.88rem; }
+.running-tag .bi { font-size: 1rem; }
+.data-table tr.row-running td { background: var(--success-soft); }
+.cell-tag-running { border-color: var(--success); color: var(--success); font-weight: 600; }
+
+/* The station form's models: each one with its own machines, one row per slot. */
+.station-models { display: grid; gap: 0.5rem; padding: 0.6rem; }
+.station-models:empty { display: none; }
+.station-model { border: 1px solid var(--border); background: var(--surface); padding: 0.45rem 0.55rem; display: grid; gap: 0.35rem; }
+.station-model.is-removing { opacity: 0.55; }
+.station-model-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.station-model-head .form-select { flex: 1 1 14rem; min-width: 0; }
+.station-model-slot { display: flex; align-items: flex-start; gap: 0.5rem; }
+.station-model-slot-name { flex: none; width: 7rem; padding-top: 0.35rem; font-size: 0.85rem; color: var(--text-muted); }
+.station-model-slot > .grow { flex: 1; min-width: 0; }

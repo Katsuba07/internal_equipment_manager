@@ -38,6 +38,26 @@ DEBUG = _env_bool("EMA_DEBUG", False)
 ALLOWED_HOSTS = _env_list("EMA_ALLOWED_HOSTS", "*")
 CSRF_TRUSTED_ORIGINS = _env_list("EMA_CSRF_TRUSTED_ORIGINS")
 
+# Reached from outside the plant through a Cloudflare Tunnel at this address
+# (https://ema.example.com). The tunnel says the visitor came over https, so
+# forms posted there pass the CSRF check. Nothing is forced to https and the
+# cookies stay usable over plain http, so the LAN address keeps working too;
+# Cloudflare's "Always Use HTTPS" keeps the internet side on https.
+EMA_PUBLIC_URL = (os.getenv("EMA_PUBLIC_URL") or "").strip().rstrip("/")
+if EMA_PUBLIC_URL:
+    _public_host = EMA_PUBLIC_URL.split("://", 1)[-1].split("/", 1)[0]
+    if "*" not in ALLOWED_HOSTS and _public_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_public_host)
+    if EMA_PUBLIC_URL not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(EMA_PUBLIC_URL)
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Guessing passwords: after this many failed sign-ins for one user name, or
+# from one address, signing in is refused for that many minutes (core.login_guard).
+EMA_LOGIN_MAX_FAILURES = int(os.getenv("EMA_LOGIN_MAX_FAILURES", "5"))
+EMA_LOGIN_LOCKOUT_MINUTES = int(os.getenv("EMA_LOGIN_LOCKOUT_MINUTES", "15"))
+AUTHENTICATION_BACKENDS = ["core.login_guard.GuardedModelBackend"]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -145,7 +165,10 @@ DATETIME_FORMAT = "d M Y H:i"
 SHORT_DATE_FORMAT = "d M Y"
 DATE_INPUT_FORMATS = ["%Y-%m-%d", "%d/%m/%Y", "%d %b %Y"]
 DATETIME_INPUT_FORMATS = ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M"]
-USE_THOUSAND_SEPARATOR = True
+# Off: with it on, every id printed into a page (a form value, a data-
+# attribute) reads "1,120" once records pass a thousand, and stops working.
+# Large figures are grouped where wanted with |intcomma or |floatformat:"g".
+USE_THOUSAND_SEPARATOR = False
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -208,6 +231,9 @@ if "test" in sys.argv[1:2]:
     EMA_DOCS_ROOT = None
     # ...and never feeds a label through the real printer.
     EMA_LABEL_PRINTER = ""
+    # Many tests sign in wrongly on purpose, all from 127.0.0.1: only the
+    # login guard's own tests lower this.
+    EMA_LOGIN_MAX_FAILURES = 10_000
 EMA_DOCS_SHAREPOINT_SITE = os.getenv("EMA_DOCS_SHAREPOINT_SITE", "https://computimehk.sharepoint.com")
 EMA_DOCS_SHAREPOINT_FOLDER = os.getenv(
     "EMA_DOCS_SHAREPOINT_FOLDER", "/sites/CTV/Shared Documents/CTV3/MP lines Prepare Setup CTVN CTV3/TE"

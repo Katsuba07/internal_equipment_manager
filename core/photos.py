@@ -11,13 +11,17 @@ Uploaded files are served only to signed-in users (``serve_upload``).
 
 import io
 import os
+import re
+import time
+import uuid
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.core.files.base import ContentFile
+from django.core.files.base import ContentFile, File
+from django.http import FileResponse, Http404, JsonResponse
 from django.db import transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
@@ -82,7 +86,90 @@ def save_photos(obj, uploads, user, kind=AttachmentKind.PHOTO) -> int:
     for upload in uploads or []:
         save_photo(obj, upload, user, kind=kind)
         saved += 1
+        discard_staged(upload)
     return saved
+
+
+# --- Photos sent ahead of the form ----------------------------------------
+# A photo is uploaded the moment it is taken or picked, and kept here under a
+# random token until the form is saved. So a form that comes back with an
+# error (an Equipment No someone else just took) still has its photos, and a
+# phone that drops the page while the camera is open loses nothing already sent.
+
+STAGE_DIR = "staged"
+STAGE_TOKEN = re.compile(r"^[0-9a-f]{32}$")
+STAGE_KEEP_HOURS = 24
+
+
+def _stage_path(token: str) -> str:
+    return os.path.join(settings.MEDIA_ROOT, STAGE_DIR, token)
+
+
+def stage_upload(upload) -> str:
+    """Keep one checked image until its form is saved; returns its token."""
+    check_image(upload)
+    folder = os.path.join(settings.MEDIA_ROOT, STAGE_DIR)
+    os.makedirs(folder, exist_ok=True)
+    _clear_old_staged(folder)
+    token = uuid.uuid4().hex
+    with open(_stage_path(token), "wb") as fh:
+        for chunk in upload.chunks():
+            fh.write(chunk)
+    return token
+
+
+def staged_file(token: str):
+    """The staged image for a token, as a file for save_photo, or None if gone."""
+    if not STAGE_TOKEN.match(token or ""):
+        return None
+    path = _stage_path(token)
+    if not os.path.isfile(path):
+        return None
+    staged = File(open(path, "rb"), name="photo.jpg")
+    staged.staged_path = path
+    return staged
+
+
+def discard_staged(upload) -> None:
+    """Drop a staged image once it has been saved as a photo."""
+    path = getattr(upload, "staged_path", None)
+    if path:
+        upload.close()
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _clear_old_staged(folder: str) -> None:
+    limit = time.time() - STAGE_KEEP_HOURS * 3600
+    for name in os.listdir(folder):
+        path = os.path.join(folder, name)
+        try:
+            if os.path.getmtime(path) < limit:
+                os.remove(path)
+        except OSError:
+            pass
+
+
+class PhotoStageView(CanRecordMixin, View):
+    """POST one image: kept until its form is saved. GET: show a staged image again."""
+
+    def post(self, request):
+        upload = request.FILES.get("photo")
+        if upload is None:
+            return JsonResponse({"error": "No picture was received."}, status=400)
+        try:
+            token = stage_upload(upload)
+        except ValidationError as error:
+            return JsonResponse({"error": error.messages[0]}, status=400)
+        return JsonResponse({"token": token})
+
+    def get(self, request, token):
+        staged = staged_file(token)
+        if staged is None:
+            raise Http404
+        return FileResponse(staged, content_type="image/jpeg")
 
 
 def save_photo(obj, upload, user, kind=AttachmentKind.PHOTO) -> Attachment:
@@ -150,12 +237,15 @@ class PhotoUploadView(CanRecordMixin, View):
             obj = _target(app_label, model, pk)
         except (ValueError, ContentType.DoesNotExist):
             return redirect("dashboard")
-        files = request.FILES.getlist("photos")[:MAX_FILES]
+        files = request.FILES.getlist("photos")
+        files += [f for f in map(staged_file, request.POST.getlist("photos__staged")) if f is not None]
+        files = files[:MAX_FILES]
         saved, problems = 0, []
         for upload in files:
             try:
                 save_photo(obj, upload, request.user, kind=kind)
                 saved += 1
+                discard_staged(upload)
             except ValidationError as error:
                 problems.append(error.messages[0])
         noun = "nameplate photo" if kind == AttachmentKind.NAMEPLATE else "photo"

@@ -5,9 +5,9 @@ from datetime import timedelta
 from django import forms
 
 from core.forms import DateInput, PhotosField, RequestFormMixin, offer_photo_removal, photos_to_remove_field
-from core.models import Category, Location
+from core.models import Category
 
-from .models import Equipment, EquipmentStatus
+from .models import Equipment
 
 
 class EquipmentForm(RequestFormMixin, forms.ModelForm):
@@ -36,12 +36,16 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
                                 "data-interval": "id_calibration_interval_months", "data-unit": "months"}),
         help_text="The date on the calibration sticker.",
     )
+    # Saving a measuring instrument without calibration, or without its dates,
+    # takes a yes: from the page's own question (app.js), or — should that not
+    # run — by ticking this when the form comes back with the warning.
+    calibration_confirmed = forms.BooleanField(required=False, label="Save it this way anyway")
 
     class Meta:
         model = Equipment
         fields = [
-            "code", "equipment_no", "asset_no", "serial_number", "name", "category", "plant", "location",
-            "manufacturer", "model_number", "year_made", "specifications",
+            "category", "equipment_no", "manufacturer", "model_number", "name", "serial_number",
+            "plant", "status", "labelled", "code", "asset_no", "specifications",
             "maintenance_required", "maintenance_interval_days",
             "is_measuring_device", "notes",
         ]
@@ -49,7 +53,7 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
             "specifications": forms.Textarea(attrs={"rows": 3}),
             "notes": forms.Textarea(attrs={"rows": 3}),
             "code": forms.TextInput(attrs={"placeholder": "e.g. 70-000148"}),
-            "equipment_no": forms.TextInput(attrs={"placeholder": "e.g. DMM-001"}),
+            "equipment_no": forms.TextInput(attrs={"placeholder": "e.g. DMM-0001"}),
             "asset_no": forms.TextInput(attrs={"placeholder": "e.g. 103220100359"}),
         }
 
@@ -57,9 +61,37 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Only offer catalogs that are still in use, so retired entries
         # cannot be picked by accident.
+        self.fields["equipment_no"].required = True
+        self.fields["equipment_no"].error_messages["required"] = "Give the asset its Equipment No (for example DMM-0001)."
+        self.fields["code"].required = False
+        # Left out of a post, the status stays as it is (In use for a new asset).
+        self.fields["status"].required = False
+        # Every asset belongs to a plant.
+        self.fields["plant"].required = True
+        self.fields["plant"].error_messages["required"] = "Choose the plant the asset belongs to."
+        # The name follows Manufacturer + Model (see [data-auto-name] in
+        # app.js); typed over by hand, it is kept as typed.
+        self.fields["name"].required = False
+        self.fields["name"].widget.attrs.update({
+            "data-auto-name": "", "placeholder": "Filled in from Manufacturer + Model",
+        })
+        # An asset whose name is still its Manufacturer + Model keeps following
+        # them when they are edited; a name typed by hand is left alone.
+        if self.instance.pk:
+            made = " ".join(x for x in (self.instance.manufacturer, self.instance.model_number) if x)
+            if made and " ".join(self.instance.name.split()).upper() == " ".join(made.split()).upper():
+                self.fields["name"].widget.attrs["data-made"] = self.instance.name
+        # Shown in capitals as typed; saved in capitals (Equipment.save).
+        for name in Equipment.UPPER_FIELDS:
+            if name in self.fields:
+                widget = self.fields[name].widget
+                widget.attrs["class"] = (widget.attrs.get("class", "") + " text-upper").strip()
         self.fields["category"].queryset = Category.objects.active()
-        self.fields["location"].queryset = Location.objects.active()
-        self.fields["location"].empty_label = "— not set yet —"
+        # Types that need calibration: picking one ticks "Requires calibration",
+        # and saving one unticked, or ticked with no dates, asks first (app.js).
+        self.fields["category"].widget.attrs["data-calibration-types"] = ",".join(
+            str(pk) for pk in Category.objects.filter(needs_calibration=True).values_list("pk", flat=True)
+        )
         self._load_schedules()
         offer_photo_removal(self)
         offer_photo_removal(self, field="remove_nameplate_photos", attr="nameplate_photos")
@@ -73,18 +105,57 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
                 self.fields[name].widget.attrs["data-needs"] = tick
 
     def clean_code(self):
-        # The ID goes on the QR label, so normalise case and stray spaces.
-        return self.cleaned_data["code"].strip().upper()
+        # The ZT Code goes on the QR label, so normalise case and stray spaces.
+        value = self.cleaned_data.get("code", "").strip().upper()
+        if value:
+            taken = Equipment.objects.exclude(pk=self.instance.pk).filter(code=value).first()
+            if taken:
+                raise forms.ValidationError(f"ZT Code {value} is already on {taken.ident}.")
+        return value
 
     def clean_equipment_no(self):
-        return self.cleaned_data.get("equipment_no", "").strip().upper()
+        """The asset's key: required, and one asset per number."""
+        value = Equipment.normalise_equipment_no(self.cleaned_data.get("equipment_no", ""))
+        if not value:
+            raise forms.ValidationError("Give the asset its Equipment No (for example DMM-0001).")
+        taken = Equipment.objects.exclude(pk=self.instance.pk).filter(equipment_no=value).first()
+        if taken:
+            # Often two people took the same suggested number at once: say
+            # which one is free now (the photos sent with the form are kept).
+            category = self.cleaned_data.get("category")
+            free = Equipment.equipment_no_counter(category)["next"] if category else ""
+            hint = f" The next free number is {free}." if free else ""
+            raise forms.ValidationError(f"Equipment No {value} is already on {taken.name} — saved just before you.{hint}")
+        return value
+
+    def clean_status(self):
+        return self.cleaned_data.get("status") or self.instance.status or Equipment._meta.get_field("status").default
+
+    # Stand-ins typed when a nameplate has no serial: several assets may share them.
+    NO_SERIAL = {"NA", "N/A", "N.A", "-", "--", "NONE", "NIL", "0", "NO S/N", "UNKNOWN"}
+
+    def clean_serial_number(self):
+        """One asset per serial number: a repeat is usually a barcode scanned in its place."""
+        value = " ".join(self.cleaned_data.get("serial_number", "").split()).upper()
+        if not value or value in self.NO_SERIAL:
+            return value
+        if self.instance.pk and self.instance.serial_number.upper() == value:
+            return value      # already its S/N: a repeat on record is fixed on purpose, not on every edit
+        taken = list(Equipment.objects.exclude(pk=self.instance.pk).filter(serial_number__iexact=value)[:3])
+        if taken:
+            names = ", ".join(f"{asset.ident} ({asset.name})" for asset in taken)
+            raise forms.ValidationError(
+                f"S/N {value} is already on {names}. Check the nameplate: a product barcode "
+                "is sometimes read in place of the serial number."
+            )
+        return value
 
     def clean_asset_no(self):
         value = " ".join(self.cleaned_data.get("asset_no", "").split()).upper()
         if value:
             taken = Equipment.objects.exclude(pk=self.instance.pk).filter(asset_no=value).first()
             if taken:
-                raise forms.ValidationError(f"Asset No. {value} is already on {taken.code}.")
+                raise forms.ValidationError(f"Asset No. {value} is already on {taken.ident}.")
         return value
 
     # --- Maintenance and calibration dates -------------------------------
@@ -151,6 +222,12 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        if not cleaned.get("name"):
+            name = " ".join(x for x in (cleaned.get("manufacturer", "").strip(), cleaned.get("model_number", "").strip()) if x)
+            if name:
+                cleaned["name"] = name
+            else:
+                self.add_error("name", "Give a name, or a Manufacturer and Model to make one from.")
         if cleaned.get("maintenance_required") and not cleaned.get("maintenance_interval_days"):
             self.add_error("maintenance_interval_days", "Choose how often this asset is maintained.")
         for last_field, next_field in (("maintenance_last", "maintenance_next"),
@@ -158,72 +235,19 @@ class EquipmentForm(RequestFormMixin, forms.ModelForm):
             last, due = cleaned.get(last_field), cleaned.get(next_field)
             if last and due and due < last:
                 self.add_error(next_field, "The next one cannot come before the last one.")
+        question = self.calibration_question(cleaned)
+        if question and not cleaned.get("calibration_confirmed"):
+            self.add_error("calibration_confirmed", question)
         return cleaned
 
-
-class StatusChangeForm(RequestFormMixin, forms.Form):
-    """
-    Move an asset to a new status.
-
-    Kept separate from EquipmentForm so every status change lands in the
-    history with who and when — that is what makes status auditable. The
-    reason is welcome but optional.
-
-    "In production" is not offered unless the asset is fitted to a product in
-    production: that status follows the Products page, not a person's pick.
-    """
-
-    status = forms.ChoiceField(label="New status", choices=EquipmentStatus.choices)
-    reason = forms.CharField(
-        label="Reason",
-        max_length=255,
-        required=False,
-        widget=forms.TextInput(attrs={"placeholder": "Optional — e.g. Sent to vendor for repair"}),
-    )
-    note = forms.CharField(
-        label="Details", required=False, widget=forms.Textarea(attrs={"rows": 3})
-    )
-
-    def __init__(self, *args, equipment: Equipment | None = None, **kwargs):
-        self.equipment = equipment
-        self.running = None
-        super().__init__(*args, **kwargs)
-        if equipment:
-            # Drop the current status so it cannot be re-selected, and In
-            # production unless the asset is fitted to a running product.
-            self.running = equipment.running_fitting()
-            self.fields["status"].choices = [
-                (value, label)
-                for value, label in EquipmentStatus.choices
-                if value != equipment.status
-                and (value != EquipmentStatus.IN_PRODUCTION or self.running)
-            ]
-
-    def clean_status(self):
-        status = self.cleaned_data["status"]
-        if status == EquipmentStatus.IN_PRODUCTION and self.equipment and not self.running:
-            raise forms.ValidationError(
-                "Only equipment fitted to a product in production is In production. "
-                "Fit it into an equipment set on the Products page."
-            )
-        return status
-
-
-class EquipmentImportForm(forms.Form):
-    """Bulk-load assets from a spreadsheet."""
-
-    file = forms.FileField(label="Excel file (.xlsx)")
-    update_existing = forms.BooleanField(
-        label="Update assets that already exist (matched on ZT Code)",
-        required=False,
-        help_text="Leave unticked and rows with an existing ID are skipped instead of overwritten.",
-    )
-
-    def clean_file(self):
-        file = self.cleaned_data["file"]
-        if not file.name.lower().endswith(".xlsx"):
-            raise forms.ValidationError(
-                "Only .xlsx files are accepted. If you have a .xls or .csv, "
-                "open it in Excel and use Save As → .xlsx."
-            )
-        return file
+    @staticmethod
+    def calibration_question(cleaned) -> str:
+        """What has to be confirmed before saving, if anything (the page asks the same)."""
+        category = cleaned.get("category")
+        if category and category.needs_calibration and not cleaned.get("is_measuring_device"):
+            return (f"{category.name} normally needs calibration, but Requires calibration is not ticked. "
+                    "Tick it, or confirm it really needs none.")
+        if cleaned.get("is_measuring_device") and not cleaned.get("calibration_last") and not cleaned.get("calibration_next"):
+            return ("No calibration dates are filled in: the asset will show Calibration date unknown and must "
+                    "not be used for measuring until it is calibrated. Fill in the dates, or confirm.")
+        return ""

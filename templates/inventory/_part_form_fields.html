@@ -1,4 +1,4 @@
-{% load crispy_forms_tags %}
+{% load crispy_forms_tags photos %}
 {% comment %}The part form's fields — shared by the full page and the edit dialog.{% endcomment %}
   <div class="card">
     <div class="card-head"><i class="bi bi-tag"></i> Part</div>
@@ -32,7 +32,7 @@
       {% endif %}
       {% endwith %}
       {{ form.photos|as_crispy_field }}
-      <div class="photo-stage" data-photo-stage-for="{{ form.photos.id_for_label }}"></div>
+      {{ form.photos|photo_stage }}
     </div>
   </div>
 

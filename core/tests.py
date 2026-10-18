@@ -35,7 +35,7 @@ class BaseFixtureMixin:
             name="ICT fixture — Mainboard",
             category=cls.category,
             location=cls.location,
-            status=EquipmentStatus.IN_PRODUCTION,
+            status=EquipmentStatus.IN_USE,
         )
 
     def login(self, role):
@@ -72,8 +72,6 @@ class PageRenderTests(BaseFixtureMixin, TestCase):
             reverse("equipment:detail", args=[self.equipment.pk]),
             reverse("equipment:update", args=[self.equipment.pk]),
             reverse("equipment:delete", args=[self.equipment.pk]),
-            reverse("equipment:status_change", args=[self.equipment.pk]),
-            reverse("equipment:import"),
             reverse("password_change"),
         ]
         for url in urls:
@@ -94,12 +92,6 @@ class PageRenderTests(BaseFixtureMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("spreadsheetml", response["Content-Type"])
 
-    def test_excel_template_download(self):
-        self.login(Role.VIEWER)
-        response = self.client.get(reverse("equipment:import_template"))
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("spreadsheetml", response["Content-Type"])
-
     def test_no_template_comment_markers_leak_into_pages(self):
         """
         Django's {# #} comment is single-line only.
@@ -114,8 +106,6 @@ class PageRenderTests(BaseFixtureMixin, TestCase):
             reverse("equipment:list"),
             reverse("equipment:detail", args=[self.equipment.pk]),
             reverse("equipment:create"),
-            reverse("equipment:import"),
-            reverse("equipment:status_change", args=[self.equipment.pk]),
             reverse("equipment:delete", args=[self.equipment.pk]),
         ]:
             with self.subTest(url=url):
@@ -139,31 +129,22 @@ class PermissionTests(BaseFixtureMixin, TestCase):
             reverse("equipment:create"),
             reverse("equipment:update", args=[self.equipment.pk]),
             reverse("equipment:delete", args=[self.equipment.pk]),
-            reverse("equipment:status_change", args=[self.equipment.pk]),
-            reverse("equipment:import"),
         ]:
             with self.subTest(url=url):
                 self.assert_blocked(url, Role.VIEWER)
 
-    def test_viewer_cannot_post_status_change(self):
+    def test_viewer_cannot_change_status_by_posting_the_form(self):
         """Blocked even when posting data straight past the interface."""
         self.login(Role.VIEWER)
         response = self.client.post(
-            reverse("equipment:status_change", args=[self.equipment.pk]),
-            {"status": EquipmentStatus.DOWN, "reason": "Attempted bypass"},
+            reverse("equipment:update", args=[self.equipment.pk]),
+            {"status": EquipmentStatus.BROKEN, "equipment_no": "X-0001", "category": self.category.pk},
         )
         self.assertEqual(response.status_code, 302)
         self.equipment.refresh_from_db()
-        self.assertEqual(self.equipment.status, EquipmentStatus.IN_PRODUCTION)
+        self.assertEqual(self.equipment.status, EquipmentStatus.IN_USE)
 
-    def test_technician_can_change_status_but_not_edit_equipment(self):
-        self.login(Role.TECHNICIAN)
-        self.assertEqual(
-            self.client.get(
-                reverse("equipment:status_change", args=[self.equipment.pk])
-            ).status_code,
-            200,
-        )
+    def test_technician_cannot_edit_equipment(self):
         self.assert_blocked(reverse("equipment:update", args=[self.equipment.pk]), Role.TECHNICIAN)
 
     def test_manager_can_edit_but_not_delete(self):

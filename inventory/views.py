@@ -189,7 +189,7 @@ class StockMovementView(CanRecordMixin, FormView):
         except ValidationError as error:
             form.add_error("quantity", error.messages[0])
             return self.form_invalid(form)
-        target = f" to {movement.equipment.code}" if movement.equipment_id else ""
+        target = f" to {movement.equipment.ident}" if movement.equipment_id else ""
         messages.success(
             self.request,
             f"{movement.get_transaction_type_display()}{target} recorded — "

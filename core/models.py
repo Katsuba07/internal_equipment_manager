@@ -190,6 +190,13 @@ class Location(NamedCatalog):
 class Category(NamedCatalog):
     """Equipment family: ICT fixture, power supply, DMM, test station, ..."""
 
+    # Measuring instruments (DMM, PSU, oscilloscope ...): an asset of this type
+    # starts with "Requires calibration" ticked, so it is not forgotten.
+    needs_calibration = models.BooleanField(
+        "Needs calibration", default=False,
+        help_text="Assets of this type start with Requires calibration ticked.",
+    )
+
     class Meta:
         verbose_name = "Category"
         verbose_name_plural = "Categories"
@@ -251,24 +258,8 @@ class Product(NamedCatalog):
         return f"{self.code} {self.revision}".strip() if self.revision else self.code
 
     def save(self, *args, user=None, **kwargs):
-        # ``user`` is who flipped "In production", for the assets' status history.
-        was_running = None
-        if self.pk:
-            was_running = type(self).objects.filter(pk=self.pk).values_list("in_production", flat=True).first()
+        # ``user`` is still accepted from callers; asset status is set by hand now.
         super().save(*args, **kwargs)
-        if was_running is not None and was_running != self.in_production:
-            self.refresh_equipment_status(user)
-
-    def refresh_equipment_status(self, user=None):
-        """Starting or stopping production moves every asset fitted to this product."""
-        from equipment.models import Equipment
-
-        fitted = Equipment.objects.filter(
-            installations__removed_at__isnull=True,
-            installations__test_set__product_process__product=self,
-        ).distinct()
-        for asset in fitted:
-            asset.refresh_production_status(user)
 
 
 class Supplier(NamedCatalog):

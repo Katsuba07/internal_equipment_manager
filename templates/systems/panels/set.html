@@ -5,10 +5,10 @@
     <span class="mono fw-600">{{ test_set }}</span>
     <span class="badge {{ readiness.badge_class }}">{{ readiness.label }}</span>
     <span class="spacer"></span>
-    {% if user.can_record %}
-    <button type="button" class="btn btn-sm btn-primary" hx-get="{% url 'systems:set_edit' test_set.pk %}" hx-target="#panel">
-      <i class="bi bi-pencil"></i> Edit
-    </button>
+    {% if user.can_record and test_set.station %}
+    <a class="btn btn-sm btn-primary" href="{% url 'systems:station_model_edit' test_set.station_id test_set.pk %}">
+      <i class="bi bi-pencil"></i> Edit on {{ test_set.station }}
+    </a>
     {% endif %}
     {% if user.is_admin %}
     <a href="{% url 'systems:set_delete' test_set.pk %}" class="btn btn-sm btn-danger" title="Delete this set"><i class="bi bi-trash"></i></a>
@@ -18,7 +18,7 @@
     {{ step.product.customer.name|default:"No customer" }} ·
     <a href="?product={{ step.product_id }}" hx-get="{% url 'systems:product_panel' step.product_id %}" hx-target="#panel" hx-push-url="?product={{ step.product_id }}">{{ step.product.code }}</a> ·
     <a href="?process={{ step.pk }}" hx-get="{% url 'systems:process_panel' step.pk %}" hx-target="#panel" hx-push-url="?process={{ step.pk }}">{{ step.process.name }}</a>
-    · {{ test_set.line.name|default:"line not set" }}{% if test_set.line.plant %} <span class="badge badge-neutral">{{ test_set.line.get_plant_display }}</span>{% endif %}
+    · {{ test_set.line.name|default:"line not set" }}{% if test_set.station %} · station <b>{{ test_set.station }}</b>{% endif %}{% if test_set.line.plant %} <span class="badge badge-neutral">{{ test_set.line.get_plant_display }}</span>{% endif %}
   </div>
 
   {% if readiness.blocking %}
@@ -30,7 +30,7 @@
 
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>Role</th><th>Equipment in use</th><th>State</th></tr></thead>
+      <thead><tr><th>Needed</th><th>Machine</th><th>State</th></tr></thead>
       <tbody>
         {% for st in readiness.lines %}
         <tr>
@@ -39,11 +39,11 @@
             {% if st.equipment %}
             <div class="eq-line">
             {% with photo=st.equipment.main_photo %}
-            {% if photo %}<a href="{{ photo.file.url }}" data-lightbox class="eq-thumb" title="{{ st.equipment.code }}"><img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt="{{ st.equipment.code }}" loading="lazy"></a>
+            {% if photo %}<a href="{{ photo.file.url }}" data-lightbox class="eq-thumb" title="{{ st.equipment.ident }}"><img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.file.url }}{% endif %}" alt="{{ st.equipment.ident }}" loading="lazy"></a>
             {% else %}<span class="eq-thumb eq-thumb-empty" title="No photo"><i class="bi bi-image"></i></span>{% endif %}
             {% endwith %}
-            <span><a class="mono fw-600" href="{{ st.equipment.get_absolute_url }}">{{ st.equipment.code }}</a>
-            <span class="subtle">{{ st.equipment.name }}</span></span>
+            <span><a class="mono fw-600" href="{{ st.equipment.get_absolute_url }}">{{ st.equipment.ident }}</a>
+            <span class="subtle">{{ st.equipment.name }}</span>{% if st.from_station %} <span class="station-tag">shared</span>{% endif %}</span>
             </div>
             {% with parts=st.equipment.parts.all %}{% if parts %}
             <details class="parts-mini">
@@ -67,7 +67,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="3" class="cell-muted">No roles yet — open {{ step.process.code }} to declare what this set is made of.</td></tr>
+        <tr><td colspan="3" class="cell-muted">Not run on a station yet — open Stations and use Add model.</td></tr>
         {% endfor %}
       </tbody>
     </table>

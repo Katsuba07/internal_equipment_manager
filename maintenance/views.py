@@ -32,7 +32,7 @@ class MaintenancePlanCreateView(CanManageMixin, CreateView):
     def as_modal(self, form):
         return render_modal(
             self.request, form,
-            title=f"New maintenance plan — {self.equipment.code}",
+            title=f"New maintenance plan — {self.equipment.ident}",
             subtitle=self.equipment.name,
             action=self.request.get_full_path(), submit="Create",
         )
@@ -76,7 +76,7 @@ class MaintenancePlanUpdateView(CanManageMixin, UpdateView):
         equipment = self.object.equipment
         return render_modal(
             self.request, form,
-            title=f"Edit plan — {equipment.code}",
+            title=f"Edit plan — {equipment.ident}",
             subtitle=self.object.name,
             action=self.request.get_full_path(), submit="Save",
         )
@@ -155,7 +155,7 @@ class MaintenanceRecordCreateView(CanRecordMixin, CreateView):
     def as_modal(self, form):
         return render_modal(
             self.request, form,
-            title=f"Log maintenance — {self.equipment.code}",
+            title=f"Log maintenance — {self.equipment.ident}",
             subtitle=self.equipment.name,
             action=self.request.get_full_path(), submit="Log",
         )
@@ -175,7 +175,7 @@ class MaintenanceRecordCreateView(CanRecordMixin, CreateView):
         form.instance.performed_by = self.request.user
         response = super().form_valid(form)
         save_photos(self.object, form.cleaned_data.get("photos"), self.request.user)
-        messages.success(self.request, f"Logged maintenance for {self.equipment.code}.")
+        messages.success(self.request, f"Logged maintenance for {self.equipment.ident}.")
         if wants_modal(self.request):
             return modal_saved()
         return response

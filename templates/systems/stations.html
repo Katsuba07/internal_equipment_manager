@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Stations — {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Stations</h1>
+    <div class="sub">{{ stations|length }} station{{ stations|length|pluralize }}{% if has_filters %} of {{ total }} matching your filters{% endif %}</div>
+  </div>
+  <div class="actions no-print">
+    <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}export=1" class="btn btn-default" title="The stations listed, their machines and models, as a formatted Excel workbook with photos">
+      <i class="bi bi-file-earmark-arrow-down"></i> <span class="hide-sm">Export</span>
+    </a>
+    {% if user.can_manage %}
+    <a href="{% url 'systems:station_create' %}" class="btn btn-primary" data-modal-form="{% url 'systems:station_create' %}"><i class="bi bi-plus-lg"></i> New station</a>
+    {% endif %}
+  </div>
+</div>
+
+{# The customer, process and line filters sit in their column headers, tied to this form by form="list-filter". #}
+<form method="get" class="toolbar no-print" id="list-filter" data-autosubmit>
+  <div class="search-wrap">
+    <i class="bi bi-search"></i>
+    <input type="search" name="q" value="{{ request.GET.q }}" class="search-input" placeholder="Search station, machine or model..." autocomplete="off"
+           hx-get="{{ request.path }}" hx-trigger="input changed delay:300ms" hx-include="closest form"
+           hx-target="#results" hx-select="#results" hx-swap="outerHTML" hx-push-url="true">
+  </div>
+  <button type="submit" class="btn btn-default lg-hide">Search</button>
+  {% if has_filters %}<a href="{% url 'systems:stations' %}" class="btn btn-ghost btn-sm"><i class="bi bi-x-lg"></i> Clear</a>{% endif %}
+</form>
+
+<div class="card" id="results">
+  <div class="table-wrap">
+    <table class="data-table fixed-cols" style="--table-min:62rem">
+      <colgroup><col style="width:9.5rem"><col style="width:8rem"><col style="width:7rem"><col style="width:7.5rem"><col><col style="width:16rem"></colgroup>
+      <thead><tr>
+        <th>Station</th>
+        <th>
+          <select name="customer" form="list-filter" class="th-filter" aria-label="Filter by customer">
+            <option value="">Customer</option>
+            {% for c in customers %}<option value="{{ c.pk }}" {% if request.GET.customer == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+          </select>
+        </th>
+        <th>
+          <select name="process" form="list-filter" class="th-filter" aria-label="Filter by process">
+            <option value="">Process</option>
+            {% for p in processes %}<option value="{{ p.pk }}" {% if request.GET.process == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }}</option>{% endfor %}
+          </select>
+        </th>
+        <th>
+          <select name="line" form="list-filter" class="th-filter" aria-label="Filter by line">
+            <option value="">Line</option>
+            {% for l in lines %}<option value="{{ l.pk }}" {% if request.GET.line == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+          </select>
+        </th>
+        <th>Shared machines</th>
+        <th>Models</th>
+      </tr></thead>
+      <tbody>
+        {% for station in stations %}
+        <tr data-preview-url="{% url 'systems:station_preview' station.pk %}">
+          <td class="nowrap"><a class="mono fw-600" href="{% url 'systems:station_detail' station.pk %}">{{ station.code }}</a></td>
+          <td class="nowrap">{{ station.customer.name|default:"—" }}</td>
+          <td class="nowrap">{{ station.process.code }}</td>
+          <td class="subtle nowrap">{{ station.line.name|default:"—" }}</td>
+          <td class="wrap">{% for inst in station.held %}<a class="cell-tag" href="{{ inst.component.get_absolute_url }}" title="{{ inst.component.category.name }} · {{ inst.component.name }}">{{ inst.component.ident }}</a>{% empty %}<span class="cell-muted">—</span>{% endfor %}</td>
+          <td class="wrap">
+            {% for row in station.models %}<a class="cell-tag{% if row.running %} cell-tag-running{% endif %}" href="{% url 'systems:products' %}?set={{ row.set.pk }}" title="{% if row.running %}Running now · {% endif %}{{ row.readiness.summary }}"><span class="dot {{ row.readiness.dot_class }}"></span> {% if row.running %}<i class="bi bi-play-circle-fill"></i> {% endif %}{{ row.set.product.code }}</a>{% empty %}<span class="cell-muted">—</span>{% endfor %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty"><i class="bi bi-diagram-3"></i><div class="title">{% if has_filters %}No station matches{% else %}No stations yet{% endif %}</div></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
