@@ -486,6 +486,16 @@ EMA_LOGIN_LOCKOUT_MINUTES=15
 
 Label printing goes through Zebra Browser Print on the computer you use, as inside the plant. The first time you print from the new address, Browser Print asks to trust it: accept.
 
+### Tunnel started by run-server.ps1 (no Administrator rights)
+
+Instead of the Windows service of step 3, `run-server.ps1` can start the tunnel together with the app and stop it again with the app. Put the tunnel's token in `.env`:
+
+```
+EMA_TUNNEL_TOKEN=<the token>
+```
+
+The window then shows *Outside plant: https://ema.… (connected)*. The tunnel log is `data\cloudflared.log`. Use one or the other: when the cloudflared service is installed and running, `run-server.ps1` leaves the tunnel to it. Both connect with HTTP/2 over TCP, because the plant network drops QUIC (UDP).
+
 ### Remove the tunnel
 
 On the server, as Administrator: `cloudflared service uninstall`. Then delete the tunnel in Cloudflare and remove `EMA_PUBLIC_URL` from `.env`.

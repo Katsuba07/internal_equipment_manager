@@ -69,6 +69,14 @@ if (Get-Service -Name cloudflared -ErrorAction SilentlyContinue) {
 }
 
 & $cloudflared service install $Token
+
+# The plant network drops QUIC (UDP), which leaves the tunnel with no
+# connection: use HTTP/2 over TCP instead.
+Stop-Service -Name cloudflared -Force -ErrorAction SilentlyContinue
+Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\cloudflared" `
+    -Name Environment -Type MultiString -Value @("TUNNEL_TRANSPORT_PROTOCOL=http2")
+Start-Service -Name cloudflared
 Start-Sleep -Seconds 5
 
 $service = Get-Service -Name cloudflared -ErrorAction SilentlyContinue
